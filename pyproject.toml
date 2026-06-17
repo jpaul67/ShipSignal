@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bellwether"
+version = "0.1.0"
+description = "Agent-readiness scanner — is your codebase set up for AI agents to succeed?"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Jeremy Petersen" }]
+keywords = ["ai", "agents", "codebase", "readiness", "static-analysis"]
+dependencies = []
+
+[project.scripts]
+bellwether = "bellwether.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bellwether"]
