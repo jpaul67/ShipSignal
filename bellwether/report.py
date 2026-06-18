@@ -127,65 +127,78 @@ def _adoption_headline(adoption: dict) -> str:
 
 
 def render_impact(result: dict) -> str:
-    L: list[str] = ["", f"  Bellwether impact lens — {result['repo']}"]
+    L: list[str] = ["", f"  Bellwether impact — {result['repo']}"]
     if result.get("error"):
         L += [f"  error: {result['error']}", ""]
         return "\n".join(L)
 
     w = result["window"]
-    L.append(f"  Window: {w['first_commit']} → {w['last_commit']}  ({w['weeks']} weeks)")
+    ad = result["adoption"]
+    dh = result["delivery_health"]
+    rd = result.get("readiness")
+    L.append(f"  {w['first_commit']} → {w['last_commit']}  "
+             f"({w['weeks']} weeks, {ad['total_commits']} commits)")
     L.append("")
 
-    # AI adoption — the direct, AI-specific signal.
-    ad = result["adoption"]
-    L.append(f"  {_adoption_headline(ad)}")
-    if ad.get("adoption_date"):
-        L.append(f"  Adoption date: {ad['adoption_date']}"
-                 f"  ({'auto' if ad['adoption_auto_detected'] else 'override'})")
+    # --- The three always-on headline numbers ---
+    tool = ""
     if ad.get("per_tool"):
-        tools = ", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
-        L.append(f"  Per tool: {tools}")
+        tool = "  (" + ", ".join(f"{k} {v}" for k, v in ad["per_tool"].items()) + ")"
+    L.append(f"  AI Adoption      {ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%{tool}")
+    if dh["status"] == "scored":
+        flags = [c["flag"] for c in dh["components"] if c.get("flag")]
+        flag_s = ("   ! " + "; ".join(flags)) if flags else ""
+        L.append(f"  Delivery Health  {dh['score']}/100 · {dh['grade']}{flag_s}")
+    else:
+        L.append(f"  Delivery Health  —  ({dh['reason']})")
+    L.append(f"  Readiness        {rd['score']}/100 · {rd['grade']}" if rd
+             else "  Readiness        —  (run a readiness scan to populate)")
+    L.append("")
+
+    # --- AI adoption detail ---
+    L.append(f"  AI adoption ({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)")
+    if ad.get("adoption_date"):
+        L.append(f"   adoption date {ad['adoption_date']} "
+                 f"({'auto' if ad['adoption_auto_detected'] else 'override'})")
     series = ad.get("weekly_series", [])
     if series:
-        rates = [s[1] for s in series]
-        L.append(f"  AI rate / week: {_sparkline(rates, max_val=1.0)}  (0–100%, {len(series)} wks)")
+        spark = _sparkline([s[1] for s in series], max_val=1.0)
+        tail = "  (recent 60 wks)" if len(spark) > 60 else ""
+        L.append(f"   rate/week {spark[-60:]}{tail}  0–100%")
     L.append("")
 
-    # Enablement Score (when earned).
-    status = result.get("score_status")
-    if status == "scored":
-        L.append(f"  Enablement Score: {result['score']}/100")
+    # --- Delivery Health breakdown ---
+    if dh["status"] == "scored":
+        L.append("  Delivery Health — general engineering norms, NOT AI-attributed:")
+        for c in dh["components"]:
+            if c["score_frac"] is None:
+                L.append(f"   {c['id']:<24} {'·' * 12} {c['status']}")
+            else:
+                flag = f"  ! {c['flag']}" if c.get("flag") else ""
+                L.append(f"   {c['id']:<24} {_bar(c['score_frac'], 1.0, 12)} "
+                         f"{c['score_frac'] * 100:.0f}%  (w{c['weight']}){flag}")
+        d = dh["descriptive"]
+        L.append(f"   context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
+                 f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors")
+        L.append("")
+
+    # --- Before/after AI Enablement delta (the conditional bonus) ---
+    if result.get("score_status") == "scored":
+        L.append(f"  Before/after AI Enablement: {result['score']}/100")
         for p in result.get("pillars", []):
             if p.get("pts") is None:
-                L.append(f"   {p['id']:<20} {'·' * 16} {p.get('status','n/a')}  ({p['basis']})")
+                L.append(f"   {p['id']:<20} {'·' * 12} {p.get('status', 'n/a')}  ({p['basis']})")
             else:
-                L.append(f"   {p['id']:<20} {_bar(p['pts'], p['max'])} "
+                L.append(f"   {p['id']:<20} {_bar(p['pts'], p['max'], 12)} "
                          f"{p['pts']:g}/{p['max']:g}  ({p['basis']})")
     else:
         reason = result.get("score_withheld_reason") or "see confidence"
-        L.append(f"  Enablement Score: WITHHELD — {reason}")
+        L.append(f"  Before/after AI Enablement: n/a — {reason}")
+        L.append("   (a before/after needs a clean pre-AI baseline; the three numbers above "
+                 "stand on their own)")
     L.append("")
 
-    # Delivery profile (general health, NOT causal).
-    m = result["metrics"]
-    f, cs, q, p = m["flow"], m["change_shape"], m["quality"], m["people"]
-    L.append("  Delivery profile (general health, not causal):")
-    L.append(f"   flow         commits/wk {f['commits_per_week']:g},  "
-             f"active-day ratio {f['active_day_ratio']:g}")
-    L.append(f"   change-shape median {cs['median_lines']} lines / "
-             f"{cs['median_files']} files,  large-change rate {cs['large_change_rate']:.1%}")
-    t2c = q['test_to_code_ratio']
-    t2c_s = f"{t2c:.1%}" if t2c is not None else "n/a (no code-touching commits)"
-    L.append(f"   quality      fix/revert rate {q['fix_rate']:.1%},  "
-             f"test-to-code co-change {t2c_s}")
-    if p["solo"]:
-        L.append(f"   people       SOLO author — concentration/bus-factor metrics suppressed")
-    else:
-        L.append(f"   people       {p['contributors']} contributors, "
-                 f"top share {p['top_author_share']:.1%},  bus-factor {p['bus_factor']}")
-    L.append("")
-
-    L.append(f"  Attribution caveat: {result['attribution_caveat']}")
+    L.append(f"  Note: {result['attribution_caveat']}")
     L.append("")
     return "\n".join(L)
 
@@ -195,15 +208,28 @@ def render_impact_markdown(result: dict) -> str:
         return f"# Bellwether impact — {result['repo']}\n\n**Error:** {result['error']}\n"
     w = result["window"]
     ad = result["adoption"]
+    dh = result["delivery_health"]
+    rd = result.get("readiness")
     m = result["metrics"]
     f, cs, q, p = m["flow"], m["change_shape"], m["quality"], m["people"]
 
-    L = [f"# Bellwether — AI impact lens: {result['repo']}", "",
-         f"**Window:** {w['first_commit']} → {w['last_commit']} ({w['weeks']} weeks)", ""]
+    health_cell = (f"{dh['score']}/100 · {dh['grade']}" if dh["status"] == "scored"
+                   else f"— ({dh['reason']})")
+    ready_cell = f"{rd['score']}/100 · {rd['grade']}" if rd else "—"
+    tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())) if ad.get("per_tool") else "—"
+
+    L = [f"# Bellwether — AI impact: {result['repo']}", "",
+         f"**{w['first_commit']} → {w['last_commit']} · {w['weeks']} weeks · "
+         f"{ad['total_commits']} commits**", "",
+         "| | Result | |", "|---|---|---|",
+         f"| **AI Adoption** | {ad['level']} · {ad['ai_coauthor_share'] * 100:.0f}% | {tools} |",
+         f"| **Delivery Health** | {health_cell} | general eng norms, not AI-attributed |",
+         f"| **Readiness** | {ready_cell} | static repo state |", ""]
 
     L += ["## AI adoption (direct, in-repo signal)", "",
-          f"- **{_adoption_headline(ad)}**",
-          f"- Reported as a **lower bound** — squash-merges drop trailers."]
+          f"- **{ad['level']} — {ad['ai_coauthor_share'] * 100:.1f}%** "
+          f"({ad['ai_commits']}/{ad['total_commits']} commits), a **lower bound** "
+          "(squash-merges drop trailers)."]
     if ad.get("adoption_date"):
         L.append(f"- Adoption date: `{ad['adoption_date']}` "
                  f"({'auto-detected' if ad['adoption_auto_detected'] else 'override'})")
@@ -211,42 +237,47 @@ def render_impact_markdown(result: dict) -> str:
         L.append("- Per tool: " + ", ".join(f"`{k}` ({v})" for k, v in ad["per_tool"].items()))
     L.append("")
 
-    L += ["## Enablement Score", ""]
+    if dh["status"] == "scored":
+        L += ["## Delivery Health (general engineering norms — NOT AI-attributed)", "",
+              f"**{dh['score']}/100 · grade {dh['grade']}**", "",
+              "| Component | Score | Weight | Flag |", "|---|---|---|---|"]
+        for c in dh["components"]:
+            val = f"{c['score_frac'] * 100:.0f}%" if c["score_frac"] is not None else c["status"]
+            L.append(f"| {c['id']} | {val} | {c['weight']} | {c.get('flag') or ''} |")
+        d = dh["descriptive"]
+        L += ["", f"*Context (not scored — too noisy to rank health by): fix/revert "
+              f"{d['fix_revert_rate']:.0%}, {d['commits_per_week']:g} commits/wk, "
+              f"{d['contributors']} contributors.*", ""]
+    else:
+        L += ["## Delivery Health", "",
+              f"*Insufficient data — {dh['reason']}.*", ""]
+
+    # Before/after delta — the conditional bonus.
+    L += ["## Before/after AI Enablement (bonus — needs a clean pre-AI baseline)", ""]
     if result.get("score_status") == "scored":
-        L.append(f"**Score: {result['score']}/100**")
-        L += ["", "| Pillar | Score | Basis |", "|---|---|---|"]
+        L += [f"**{result['score']}/100**", "", "| Pillar | Score | Basis |", "|---|---|---|"]
         for pl in result.get("pillars", []):
-            val = f"{pl['pts']:g}/{pl['max']:g}" if pl.get("pts") is not None else pl.get("status","n/a")
+            val = (f"{pl['pts']:g}/{pl['max']:g}" if pl.get("pts") is not None
+                   else pl.get("status", "n/a"))
             L.append(f"| {pl['id']} | {val} | {pl['basis']} |")
     else:
-        L.append(f"**Withheld** — {result.get('score_withheld_reason','see confidence')}")
-        L.append("")
-        L.append("The lens refuses to score when history is too thin or AI was present from "
-                 "inception (no pre-AI baseline). The adoption signal and delivery profile "
-                 "below are still informative; they are not a verdict.")
-    L.append("")
-
-    t2c = q["test_to_code_ratio"]
-    t2c_md = "n/a" if t2c is None else f"{t2c:.1%}"
-    solo_note = "(solo — pillar metrics suppressed)" if p["solo"] else ""
-    L += ["## Delivery profile (general health — NOT causal)", "",
-          "| Family | Metric | Value |", "|---|---|---|",
-          f"| Flow | commits / week | {f['commits_per_week']:g} |",
-          f"| Flow | active-day ratio | {f['active_day_ratio']:g} |",
-          f"| Change shape | median lines / commit | {cs['median_lines']} |",
-          f"| Change shape | p90 lines / commit | {cs['p90_lines']} |",
-          f"| Change shape | large-change rate (>400 lines) | {cs['large_change_rate']:.1%} |",
-          f"| Quality | fix/revert subject rate | {q['fix_rate']:.1%} |",
-          f"| Quality | test-to-code co-change | {t2c_md} |",
-          f"| People | contributors | {p['contributors']} {solo_note} |"]
-    if not p["solo"]:
-        L += [f"| People | top-author share | {p['top_author_share']:.1%} |",
-              f"| People | bus-factor (50% coverage) | {p['bus_factor']} |"]
+        L.append(f"*n/a — {result.get('score_withheld_reason', 'see confidence')}. "
+                 "The three numbers above stand on their own.*")
     L.append("")
 
     L += ["## Attribution caveat", "", f"> {result['attribution_caveat']}", "",
           f"<sub>bellwether v{__version__} · {result['scanned_at']}</sub>", ""]
     return "\n".join(L)
+
+
+def _stat_card(label: str, value: str, grade: str | None, sub: str) -> str:
+    color = GRADE_COLOR.get(grade, "#4477dd") if grade else "#4477dd"
+    grade_chip = (f"<span class='gchip' style='background:{color}'>{_esc(grade)}</span>"
+                  if grade else "")
+    return (f"<div class='card' style='border-top:3px solid {color}'>"
+            f"<div class='clabel'>{_esc(label)}</div>"
+            f"<div class='cval'>{_esc(value)}{grade_chip}</div>"
+            f"<div class='csub'>{_esc(sub)}</div></div>")
 
 
 def render_impact_html(result: dict) -> str:
@@ -256,77 +287,112 @@ def render_impact_html(result: dict) -> str:
                 f"<p><b>Error:</b> {_esc(result['error'])}</p>")
     w = result["window"]
     ad = result["adoption"]
-    m = result["metrics"]
-    f, cs, q, p = m["flow"], m["change_shape"], m["quality"], m["people"]
+    dh = result["delivery_health"]
+    rd = result.get("readiness")
     pct = ad["ai_coauthor_share"] * 100
     series_rates = [s[1] for s in ad.get("weekly_series", [])]
     spark = _esc(_sparkline(series_rates, max_val=1.0)) if series_rates else ""
 
-    if result.get("score_status") == "scored":
-        rows = "".join(
-            f"<div class='row'><div class='cat'>{_esc(p['id'])}</div>"
-            f"<div class='bar'><span style='width:{100*p['pts']/p['max']:.0f}%'></span></div>"
-            f"<div class='num'>{p['pts']:g}/{p['max']:g}</div></div>"
-            if p.get("pts") is not None else
-            f"<div class='row'><div class='cat'>{_esc(p['id'])}</div>"
-            f"<div class='bar na'></div><div class='num'>{_esc(p.get('status','n/a'))}</div></div>"
-            for p in result.get("pillars", [])
-        )
-        score_block = (f"<p><span class='score'>{result['score']}</span>"
-                       f"<span class='slash'>/100</span></p>{rows}")
+    # --- three headline cards ---
+    tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
+             if ad.get("per_tool") else "no AI trailers")
+    cards = (f"<div class='card' style='border-top:3px solid #4477dd'>"
+             f"<div class='clabel'>AI Adoption</div>"
+             f"<div class='cval'>{ad['level']}<span class='pct'>{pct:.0f}%</span></div>"
+             f"<div class='csub'>{_esc(tools)} · lower bound</div></div>")
+    if dh["status"] == "scored":
+        cards += _stat_card("Delivery Health", f"{dh['score']}/100 ", dh["grade"],
+                            "general eng norms")
     else:
-        score_block = (f"<div class='withheld'><b>Score withheld</b> — "
-                       f"{_esc(result.get('score_withheld_reason','see confidence'))}<br>"
-                       f"<span class='hint'>The lens refuses to score when history is too thin "
-                       f"or AI was present from inception (no pre-AI baseline).</span></div>")
+        cards += _stat_card("Delivery Health", "—", None, dh["reason"])
+    if rd:
+        cards += _stat_card("Readiness", f"{rd['score']}/100 ", rd["grade"], "static repo state")
+    else:
+        cards += _stat_card("Readiness", "—", None, "not run")
 
-    people_row = (f"SOLO author — pillar metrics suppressed" if p["solo"] else
-                  f"{p['contributors']} contributors · top {p['top_author_share']:.1%} · "
-                  f"bus-factor {p['bus_factor']}")
-    t2c = q['test_to_code_ratio']
-    t2c_s = "n/a" if t2c is None else f"{t2c:.1%}"
+    # --- delivery-health breakdown ---
+    if dh["status"] == "scored":
+        rows = ""
+        for c in dh["components"]:
+            flag = (f"<span class='flag'>{_esc(c['flag'])}</span>" if c.get("flag") else "")
+            if c["score_frac"] is None:
+                rows += (f"<div class='row'><div class='cat'>{_esc(c['id'])}</div>"
+                         f"<div class='bar na'></div>"
+                         f"<div class='num'>{_esc(c['status'])}</div></div>")
+            else:
+                rows += (f"<div class='row'><div class='cat'>{_esc(c['id'])}</div>"
+                         f"<div class='bar'><span style='width:{c['score_frac'] * 100:.0f}%'></span></div>"
+                         f"<div class='num'>{c['score_frac'] * 100:.0f}% {flag}</div></div>")
+        d = dh["descriptive"]
+        ctx = (f"<p class='hint'>Context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
+               f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors.</p>")
+        health_block = (f"<h2>Delivery Health <span class='hint'>(general norms, "
+                        f"NOT AI-attributed)</span></h2>{rows}{ctx}")
+    else:
+        health_block = (f"<h2>Delivery Health</h2><div class='withheld'>Insufficient data — "
+                        f"{_esc(dh['reason'])}.</div>")
+
+    # --- before/after bonus ---
+    if result.get("score_status") == "scored":
+        prows = "".join(
+            f"<div class='row'><div class='cat'>{_esc(pl['id'])}</div>"
+            f"<div class='bar'><span style='width:{100 * pl['pts'] / pl['max']:.0f}%'></span></div>"
+            f"<div class='num'>{pl['pts']:g}/{pl['max']:g}</div></div>"
+            if pl.get("pts") is not None else
+            f"<div class='row'><div class='cat'>{_esc(pl['id'])}</div>"
+            f"<div class='bar na'></div><div class='num'>{_esc(pl.get('status', 'n/a'))}</div></div>"
+            for pl in result.get("pillars", [])
+        )
+        bonus_block = (f"<h2>Before/after AI Enablement</h2>"
+                       f"<p><span class='score'>{result['score']}</span>"
+                       f"<span class='slash'>/100</span></p>{prows}")
+    else:
+        bonus_block = (f"<h2>Before/after AI Enablement <span class='hint'>(bonus)</span></h2>"
+                       f"<div class='withheld'>n/a — "
+                       f"{_esc(result.get('score_withheld_reason', 'see confidence'))}<br>"
+                       f"<span class='hint'>A before/after needs a clean pre-AI baseline; the "
+                       f"three numbers above stand on their own.</span></div>")
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>
-body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
+body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
 h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
-.score{{font-size:48px;font-weight:700}}.slash{{color:#bbb;font-size:24px}}
-.row{{display:flex;align-items:center;margin:6px 0}}.cat{{width:180px;color:#555}}
+.cards{{display:flex;gap:12px;margin:16px 0 24px}}
+.card{{flex:1;background:#fafafa;border-radius:8px;padding:14px 16px}}
+.clabel{{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
+.cval{{font-size:22px;font-weight:700;margin:4px 0}}
+.cval .pct{{font-size:14px;color:#888;font-weight:400;margin-left:6px}}
+.csub{{color:#777;font-size:12px}}
+.gchip{{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;font-size:14px;margin-left:6px;vertical-align:middle}}
+.score{{font-size:40px;font-weight:700}}.slash{{color:#bbb;font-size:22px}}
+.row{{display:flex;align-items:center;margin:6px 0}}.cat{{width:200px;color:#555}}
 .bar{{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}}
 .bar span{{display:block;height:100%;background:#4c1}}
 .bar.na{{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}}
-.num{{width:90px;text-align:right;color:#333}}
+.num{{width:120px;text-align:right;color:#333}}
+.flag{{color:#b8860b;font-weight:600;font-size:12px}}
+.spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px;word-break:break-all}}
 .headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
-.headline b{{font-size:18px}}
-.spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px}}
 .withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
-.hint{{color:#666;font-size:13px}}
-.profile{{margin:10px 0;padding:10px 16px;background:#fafafa;border-radius:6px}}
-.profile .label{{color:#888;display:inline-block;min-width:140px}}
+.hint{{color:#666;font-size:13px;font-weight:400}}
 .caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 </style></head><body>
-<h1>Bellwether — AI impact lens</h1>
-<div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} ({w['weeks']} weeks)</div>
+<h1>Bellwether — AI impact</h1>
+<div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} · {w['weeks']} weeks · {ad['total_commits']} commits</div>
+
+<div class="cards">{cards}</div>
 
 <div class="headline">
-  <b>AI co-author share: {pct:.1f}%</b>
+  <b>AI adoption {pct:.1f}%</b>
   <span class="hint">({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)</span><br>
   {("Adoption date: <code>" + _esc(ad['adoption_date']) + "</code>") if ad.get('adoption_date') else "<span class='hint'>No sustained adoption window detected.</span>"}
-  {("<br>Per tool: " + ", ".join(_esc(k)+" ("+str(v)+")" for k,v in ad['per_tool'].items())) if ad.get('per_tool') else ""}
   {("<br>Rate / week: <span class='spark'>" + spark + "</span>") if spark else ""}
 </div>
 
-<h2>Enablement Score</h2>
-{score_block}
+{health_block}
 
-<h2>Delivery profile <span class="hint">(general health, NOT causal)</span></h2>
-<div class="profile">
-  <div><span class="label">Flow</span> commits/wk {f['commits_per_week']:g} · active-day ratio {f['active_day_ratio']:g}</div>
-  <div><span class="label">Change shape</span> median {cs['median_lines']} lines / {cs['median_files']} files · large-change rate {cs['large_change_rate']:.1%}</div>
-  <div><span class="label">Quality</span> fix/revert {q['fix_rate']:.1%} · test-to-code co-change {t2c_s}</div>
-  <div><span class="label">People</span> {_esc(people_row)}</div>
-</div>
+{bonus_block}
 
 <div class="caveat"><b>Attribution caveat.</b> {_esc(result['attribution_caveat'])}</div>
 <p><sub>bellwether v{__version__} · {_esc(result['scanned_at'])}</sub></p>

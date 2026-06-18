@@ -78,13 +78,14 @@ def _cmd_impact(args: argparse.Namespace) -> int:
         return 2
     assert root is not None
     try:
-        # Optional readiness score for the agent_readiness pillar.
+        # Readiness runs by default so the three-number header is always complete.
+        # --no-readiness skips it (e.g. to save a few seconds on a huge repo).
         readiness_score: int | None = None
-        if args.with_readiness:
+        if not args.no_readiness:
             try:
                 readiness_score = scanner.scan(root, repo_label=label)["score"]
             except Exception as exc:  # pragma: no cover
-                print(f"  warning: readiness scan failed ({exc}); pillar will be n/a",
+                print(f"  warning: readiness scan failed ({exc}); readiness will show n/a",
                       file=sys.stderr)
         result = impact.compute_impact(
             root,
@@ -136,8 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     impact_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
     impact_p.add_argument("--adoption-date", metavar="YYYY-MM-DD", default=None,
                           help="override the auto-detected adoption date")
-    impact_p.add_argument("--with-readiness", action="store_true",
-                          help="also run the readiness scan and feed the agent_readiness pillar")
+    impact_p.add_argument("--no-readiness", action="store_true",
+                          help="skip the readiness scan (the Readiness number shows n/a)")
 
     args = parser.parse_args(argv)
     if args.cmd == "scan":

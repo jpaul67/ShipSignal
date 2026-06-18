@@ -36,17 +36,19 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 Six scored categories sum to 100 (entry 20, agent 15, coverage 20, setup 20, integrity 13, freshness 12). Categories can be **n/a** or **indeterminate**; the score renormalizes over what was actually scored, so a small well-documented library isn't punished.
 
-## Impact lens — what it measures
+## Impact lens — three always-on numbers
 
-| Family | Signal |
+Every impact scan headlines with three numbers that are *always* computed (above a tiny sample floor):
+
+| Number | What it is |
 |---|---|
-| AI adoption | `Co-Authored-By:` trailer share — the one direct, AI-specific signal (lower bound) |
-| Flow | commits/week, active-day ratio |
-| Change shape | median/p90 lines per commit, large-change rate |
-| Quality | fix/revert subject rate, test-to-code co-change |
-| People | contributors, top-author share, bus-factor (solo repos get a "descriptive only" guard) |
+| **AI Adoption** | `Co-Authored-By:` trailer share + level (None / Emerging / Established / Pervasive). The one direct, AI-specific signal — reported as a lower bound (squash-merges drop trailers). |
+| **Delivery Health** | A 0–100 snapshot scored against general engineering norms — *not* AI-attributed. Combines change-size discipline, test discipline, and (for teams) knowledge distribution. Flags surface real risks (`low test discipline`, `concentration risk`). |
+| **Readiness** | The static-state score from `scan` (runs by default; `--no-readiness` to skip). |
 
-The Enablement Score is **withheld** when history is too thin (confidence gate) or AI was present from inception (no pre-AI baseline). That restraint is the point — *"the most valuable output is what the lens refuses to do"* — see [docs/impact-lens.md](#) (spec lives in Drive).
+A fourth, *conditional* **Before/after AI Enablement** delta appears only when the data supports it — there's a clean pre-AI baseline window AND ≥ 20 commits in both windows AND ≥ 50 commits total AND ≥ 6 weeks of history. In the wild that combination is rare (most repos are AI-from-inception, no-AI, or ambient-AI), so it's the *bonus*, not the headline — competitors fake this score; we don't.
+
+Calibrated across crown (Pervasive · 55/F · 83/B — flags real test gap), chalk (None · 77/C · 80/B — flags concentration), vitest (Emerging · 97/A · 97/A — clean). Component definitions in [the spec](#) (Drive).
 
 ## Output
 

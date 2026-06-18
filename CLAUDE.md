@@ -6,7 +6,7 @@ Guidance for AI agents working in the Bellwether repo. Human overview: [README.m
 
 Bellwether — a read-only, LLM-free CLI with **two lenses**:
 - **Readiness** (built, v0 + Phase A) — grades a repo 0–100 on whether it's set up for coding agents (READMEs, agent files, setup tooling, doc integrity/freshness) and lists the fixes.
-- **Impact** (built, Phase C) — `git log` analytics: AI-adoption share (the one direct AI signal — `Co-Authored-By:` trailers, reported as a lower bound), plus delivery profile (flow, change shape, quality, people) and an Enablement Score that is **withheld** when history is too thin or AI was present from inception.
+- **Impact** (built, Phase C) — `git log` analytics. Every scan headlines with three always-on numbers: **AI Adoption** (the one direct AI signal — `Co-Authored-By:` trailers, lower bound, banded into None/Emerging/Established/Pervasive), **Delivery Health** (a 0–100 snapshot scored against general engineering norms, NOT AI-attributed — change-size discipline + test discipline + knowledge distribution, with surfaced flags), and **Readiness** (the static score). A fourth before/after AI Enablement delta appears only when a clean pre-AI baseline exists.
 
 Pure Python stdlib, no runtime dependencies. Both lenses share architecture and dogfood the same repo.
 
@@ -38,7 +38,7 @@ Pipelines:
 - **Detectors must degrade gracefully.** A non-git directory still scans (freshness becomes *indeterminate*, not zero). Impact lens returns an `error` field on a non-git or empty repo, not a crash.
 - **False-positive guards are load-bearing** (learned from real-repo calibration): skip `http`/`mailto`/anchor/absolute links, strip `#anchors`, ignore links that escape the repo, and treat agent-file freshness gently (`gentle=True`). Don't regress these.
 - **n/a vs indeterminate vs scored** are distinct in [scoring.py](bellwether/scoring.py) — preserve the distinction; the readiness score renormalizes over scored categories only.
-- **Impact lens is honest by construction.** AI adoption is the only *direct* AI signal and is reported as a **lower bound** (squash-merges drop trailers). Delivery pillars are context, never causal — the attribution caveat must travel with every Impact report. Score is **withheld** by the confidence gate or `no_baseline` rule rather than rendered noisy. **Never read diff or prompt content** — only metadata (dates, sizes, paths, trailers).
+- **Impact lens is honest by construction.** Three always-on numbers + one conditional bonus: AI Adoption (the only *direct* AI signal — lower bound), Delivery Health (general eng norms, NOT AI-attributed — never imply causation), Readiness (static). The before/after Enablement delta is the bonus, withheld unless a clean pre-AI baseline exists. Delivery-Health *flags* are blunt (`low test discipline`) on purpose — actionable, not score-padding. **Never read diff or prompt content** — only metadata (dates, sizes, paths, trailers).
 - **The known-AI registry** ([impact.py](bellwether/impact.py): `AI_TOOL_ALIASES`) is a versioned constant — extend deliberately, like the Readiness `SCORE_CAPS`.
 - **Clone is treeless** (`--filter=blob:none`), never `--depth=1` — freshness *and* impact-history need git history.
 - **Tests are stdlib `unittest`** in `tests/`. Run them before committing.

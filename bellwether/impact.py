@@ -23,8 +23,9 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from . import gitinfo
+from .scoring import grade_for
 
-SCHEMA_VERSION = "impact-0.1"
+SCHEMA_VERSION = "impact-0.2"
 
 # ---------------------------------------------------------------------------
 # Known-AI registry — versioned constant (extend deliberately).
@@ -64,11 +65,14 @@ _CODE_EXTS = {
     ".cs", ".rb", ".php", ".scala", ".m", ".mm",
 }
 
-# Confidence-gate defaults.
+# Confidence-gate defaults for the (conditional) before/after Enablement delta.
 MIN_COMMITS_FOR_SCORE = 50
 MIN_WEEKS_FOR_SCORE = 6
 MIN_BASELINE_COMMITS = 20
 MIN_CURRENT_COMMITS = 20
+
+# Delivery-health (snapshot) needs far less — just enough to not be pure noise.
+MIN_COMMITS_FOR_HEALTH = 20
 
 # Adoption auto-detect defaults.
 ADOPTION_RATE_THRESHOLD = 0.25
@@ -325,6 +329,131 @@ def people_metrics(commits: list[Commit]) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# AI adoption LEVEL — always computable, never withheld.
+# A direct measurement of uptake, banded for at-a-glance reading. This is the
+# one AI-specific number the tool always stands behind (a lower bound).
+# ---------------------------------------------------------------------------
+def adoption_level(share: float) -> str:
+    if share <= 0:
+        return "None"
+    if share < 0.10:
+        return "Emerging"      # ambient / individual use
+    if share < 0.50:
+        return "Established"   # a meaningful share of work
+    return "Pervasive"         # the default way the team ships
+
+
+# ---------------------------------------------------------------------------
+# Delivery HEALTH — a current-state snapshot scored against GENERAL engineering
+# norms. NOT a before/after, NOT AI-attributed. Always available (above a small
+# sample floor), so a scan is never empty.
+#
+# Which signals are scored vs merely described was decided from real calibration
+# (chalk / vitest / crown): change-size discipline, test discipline, and (for
+# teams) knowledge distribution separate healthy from unhealthy cleanly. Fix-rate
+# and cadence do NOT (vitest's 34% fix-rate and crown's 26% don't rank by health;
+# a mature lib's low cadence isn't ill health) — so those stay descriptive.
+# Weights are v0.1 and tunable as more repos calibrate.
+# ---------------------------------------------------------------------------
+def _band(value: float, points: list[tuple[float, float]], lower_is_better: bool) -> float:
+    """Piecewise-linear score in [0,1]. ``points`` = [(threshold, score)] ascending
+    by threshold; interpolates between, clamps outside."""
+    if lower_is_better:
+        if value <= points[0][0]:
+            return points[0][1]
+        if value >= points[-1][0]:
+            return points[-1][1]
+    else:
+        if value <= points[0][0]:
+            return points[0][1]
+        if value >= points[-1][0]:
+            return points[-1][1]
+    for (t0, s0), (t1, s1) in zip(points, points[1:]):
+        if t0 <= value <= t1:
+            frac = (value - t0) / (t1 - t0) if t1 != t0 else 0
+            return s0 + frac * (s1 - s0)
+    return points[-1][1]
+
+
+def _change_size_subscore(cs: dict) -> float:
+    # Small, frequent commits = healthy (trunk-based / DORA wisdom).
+    median = _band(cs["median_lines"],
+                   [(50, 1.0), (150, 0.5), (400, 0.2), (1000, 0.1)], lower_is_better=True)
+    large = _band(cs["large_change_rate"],
+                  [(0.05, 1.0), (0.15, 0.6), (0.30, 0.3), (0.60, 0.1)], lower_is_better=True)
+    return 0.6 * median + 0.4 * large
+
+
+def _test_subscore(ratio: float) -> float:
+    return _band(ratio,
+                 [(0.03, 0.10), (0.08, 0.25), (0.15, 0.45),
+                  (0.25, 0.65), (0.40, 0.90), (0.60, 1.0)], lower_is_better=False)
+
+
+def _knowledge_subscore(people: dict) -> float:
+    # Lower author concentration + higher bus-factor = less key-person risk.
+    conc = _band(people["top_author_share"],
+                 [(0.30, 1.0), (0.50, 0.6), (0.70, 0.35), (0.90, 0.15)], lower_is_better=True)
+    if people["bus_factor"] >= 3:
+        conc = max(conc, 0.7)  # several people share the load — floor it up
+    return conc
+
+
+def delivery_health(commits: list[Commit], metrics: dict) -> dict:
+    if len(commits) < MIN_COMMITS_FOR_HEALTH:
+        return {"status": "insufficient", "score": None, "grade": None,
+                "reason": f"only {len(commits)} commits (need {MIN_COMMITS_FOR_HEALTH} "
+                          "for a delivery-health snapshot)",
+                "components": [], "descriptive": {}}
+
+    cs, q, p = metrics["change_shape"], metrics["quality"], metrics["people"]
+    components: list[dict] = []
+
+    cs_frac = _change_size_subscore(cs)
+    components.append({"id": "change_size_discipline", "weight": 35,
+                       "score_frac": round(cs_frac, 3), "status": "scored",
+                       "flag": "large commits" if cs_frac < 0.5 else None})
+
+    t2c = q["test_to_code_ratio"]
+    if t2c is None:
+        components.append({"id": "test_discipline", "weight": 35, "score_frac": None,
+                           "status": "n/a", "flag": None})
+    else:
+        t_frac = _test_subscore(t2c)
+        components.append({"id": "test_discipline", "weight": 35,
+                           "score_frac": round(t_frac, 3), "status": "scored",
+                           "flag": "low test discipline" if t2c < 0.15 else None})
+
+    if p["solo"]:
+        components.append({"id": "knowledge_distribution", "weight": 30, "score_frac": None,
+                           "status": "n/a (solo author)", "flag": None})
+    else:
+        k_frac = _knowledge_subscore(p)
+        concentrated = p["top_author_share"] > 0.50 or p["bus_factor"] == 1
+        components.append({"id": "knowledge_distribution", "weight": 30,
+                           "score_frac": round(k_frac, 3), "status": "scored",
+                           "flag": "concentration risk" if concentrated else None})
+
+    scored = [c for c in components if c["score_frac"] is not None]
+    denom = sum(c["weight"] for c in scored)
+    num = sum(c["weight"] * c["score_frac"] for c in scored)
+    score = round(100 * num / denom) if denom else None
+
+    return {
+        "status": "scored",
+        "score": score,
+        "grade": grade_for(score) if score is not None else None,
+        "components": components,
+        "descriptive": {  # shown, never scored — too noisy to rank health by
+            "fix_revert_rate": q["fix_rate"],
+            "commits_per_week": metrics["flow"]["commits_per_week"],
+            "active_day_ratio": metrics["flow"]["active_day_ratio"],
+            "contributors": p["contributors"],
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Confidence gate
 # ---------------------------------------------------------------------------
 @dataclass
@@ -476,8 +605,10 @@ def compute_impact(
         else detect_adoption_date(commits)
     )
     ai_count = sum(1 for c in commits if c.ai_authored)
+    share = round(ai_count / len(commits), 3)
     result["adoption"] = {
-        "ai_coauthor_share": round(ai_count / len(commits), 3),
+        "ai_coauthor_share": share,
+        "level": adoption_level(share),
         "ai_commits": ai_count,
         "total_commits": len(commits),
         "adoption_date": adoption_dt.isoformat() if adoption_dt else None,
@@ -494,6 +625,14 @@ def compute_impact(
         "quality": quality_metrics(commits),
         "people": people_metrics(commits),
     }
+
+    # --- The three always-on headline numbers ---
+    # 1) AI adoption level (above), 2) delivery-health snapshot, 3) readiness.
+    result["delivery_health"] = delivery_health(commits, result["metrics"])
+    result["readiness"] = (
+        {"score": readiness_score, "grade": grade_for(readiness_score)}
+        if readiness_score is not None else None
+    )
 
     # --- Confidence + no-baseline detection ---
     conf = assess_confidence(commits)

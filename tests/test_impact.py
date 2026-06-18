@@ -6,8 +6,10 @@ from pathlib import Path
 from bellwether import impact
 from bellwether.impact import (
     Commit,
+    adoption_level,
     assess_confidence,
     compute_impact,
+    delivery_health,
     detect_adoption_date,
     flow_metrics,
     people_metrics,
@@ -165,6 +167,102 @@ class TestQualityAndFlow(unittest.TestCase):
             commits.append(_c(date_str=f"2026-01-{d:02d}"))
         f = flow_metrics(commits)
         self.assertGreater(f["commits_per_week"], 0)
+
+
+class TestAdoptionLevel(unittest.TestCase):
+    def test_bands(self):
+        self.assertEqual(adoption_level(0.0), "None")
+        self.assertEqual(adoption_level(0.013), "Emerging")   # vitest's 1.3%
+        self.assertEqual(adoption_level(0.30), "Established")
+        self.assertEqual(adoption_level(0.971), "Pervasive")  # crown's 97%
+
+
+class TestDeliveryHealth(unittest.TestCase):
+    def _commits(self, n, *, lines=20, files=1, test_every=0, email="a@x"):
+        """Build n commits; every `test_every`-th also touches a test path."""
+        out = []
+        for i in range(n):
+            day = date(2026, 1, 1) + timedelta(days=i)
+            files_list = [f"src/mod{i}.py"]
+            if test_every and i % test_every == 0:
+                files_list.append(f"tests/mod{i}_test.py")
+            out.append(Commit("h", day, email, "feat: x", [], files_list, lines, 0))
+        return out
+
+    def test_insufficient_below_floor(self):
+        dh = delivery_health(self._commits(5), {
+            "change_shape": {"median_lines": 20, "large_change_rate": 0.0, "median_files": 1},
+            "quality": {"fix_rate": 0.1, "test_to_code_ratio": 0.5},
+            "people": {"solo": True, "top_author_share": 1.0, "bus_factor": 1, "contributors": 1},
+            "flow": {"commits_per_week": 5, "active_day_ratio": 1.0},
+        })
+        self.assertEqual(dh["status"], "insufficient")
+        self.assertIsNone(dh["score"])
+
+    def test_solo_suppresses_knowledge(self):
+        commits = self._commits(30, test_every=2)
+        m = {
+            "change_shape": {"median_lines": 20, "large_change_rate": 0.0, "median_files": 1},
+            "quality": {"fix_rate": 0.1, "test_to_code_ratio": 0.5},
+            "people": {"solo": True, "top_author_share": 1.0, "bus_factor": 1, "contributors": 1},
+            "flow": {"commits_per_week": 7, "active_day_ratio": 1.0},
+        }
+        dh = delivery_health(commits, m)
+        self.assertEqual(dh["status"], "scored")
+        know = next(c for c in dh["components"] if c["id"] == "knowledge_distribution")
+        self.assertIn("solo", know["status"])
+        self.assertIsNone(know["score_frac"])  # not counted in the denominator
+
+    def test_low_test_discipline_flagged(self):
+        commits = self._commits(40, test_every=0)  # zero test-touching commits
+        m = {
+            "change_shape": {"median_lines": 20, "large_change_rate": 0.0, "median_files": 1},
+            "quality": {"fix_rate": 0.1, "test_to_code_ratio": 0.0},
+            "people": {"solo": True, "top_author_share": 1.0, "bus_factor": 1, "contributors": 1},
+            "flow": {"commits_per_week": 7, "active_day_ratio": 1.0},
+        }
+        dh = delivery_health(commits, m)
+        test_c = next(c for c in dh["components"] if c["id"] == "test_discipline")
+        self.assertEqual(test_c["flag"], "low test discipline")
+
+    def test_good_repo_scores_high(self):
+        commits = self._commits(60, lines=15, test_every=1)
+        m = {
+            "change_shape": {"median_lines": 15, "large_change_rate": 0.02, "median_files": 2},
+            "quality": {"fix_rate": 0.15, "test_to_code_ratio": 0.6},
+            "people": {"solo": False, "top_author_share": 0.25, "bus_factor": 4, "contributors": 20},
+            "flow": {"commits_per_week": 20, "active_day_ratio": 0.7},
+        }
+        dh = delivery_health(commits, m)
+        self.assertEqual(dh["status"], "scored")
+        self.assertGreaterEqual(dh["score"], 90)  # vitest-like profile
+
+    def test_concentration_risk_flagged(self):
+        commits = self._commits(40, test_every=3, email="solo@x")
+        m = {
+            "change_shape": {"median_lines": 10, "large_change_rate": 0.0, "median_files": 1},
+            "quality": {"fix_rate": 0.065, "test_to_code_ratio": 0.3},
+            "people": {"solo": False, "top_author_share": 0.545, "bus_factor": 1, "contributors": 71},
+            "flow": {"commits_per_week": 1, "active_day_ratio": 0.05},
+        }
+        dh = delivery_health(commits, m)
+        know = next(c for c in dh["components"] if c["id"] == "knowledge_distribution")
+        self.assertEqual(know["flag"], "concentration risk")
+
+
+class TestThreeNumbersAlwaysPresent(unittest.TestCase):
+    """The whole point of the redesign: a scan is never empty."""
+    def test_keys_present(self):
+        result = compute_impact(REPO, repo_label="bellwether", readiness_score=100)
+        self.assertIn("level", result["adoption"])
+        self.assertIn("delivery_health", result)
+        self.assertEqual(result["readiness"], {"score": 100, "grade": "A"})
+
+    def test_adoption_level_never_withheld(self):
+        # Even on bellwether's tiny history, adoption level is a real value.
+        result = compute_impact(REPO, repo_label="bellwether")
+        self.assertIn(result["adoption"]["level"],
+                      {"None", "Emerging", "Established", "Pervasive"})
 
 
 class TestSelfImpact(unittest.TestCase):
