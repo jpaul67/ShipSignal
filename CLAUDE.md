@@ -12,10 +12,11 @@ Pure Python stdlib, no runtime dependencies. Both lenses share architecture and 
 
 ## Commands
 
-- Readiness: `python -m bellwether.cli scan <path | url | owner/repo>`
-  - Reports: `--json FILE` · `--md FILE` · `--html FILE` · `--badge FILE`; CI gate: `--fail-under N`
-- Impact: `python -m bellwether.cli impact <path | url | owner/repo>`
-  - Reports: `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`; `--with-readiness` also runs the scan and feeds the agent_readiness pillar.
+- **Unified audit** (recommended for deliverables): `python -m bellwether.cli report <path | url | owner/repo>`
+  - Reports: `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`
+  - Runs both lenses; one combined document; the canonical audit form.
+- Readiness only: `python -m bellwether.cli scan <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE` · `--badge FILE`; CI gate: `--fail-under N`
+- Impact only: `python -m bellwether.cli impact <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`; `--no-readiness` to skip the embedded readiness number.
 - Tests: `python -m unittest discover -s tests -v` (or `make test`)
 - Dogfood (the repo passes its own scan): `python -m bellwether.cli scan . --fail-under 90` (or `make scan`)
 

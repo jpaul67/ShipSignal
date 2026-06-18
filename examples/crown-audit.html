@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>AI impact — crown</title><style>
+body{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}
+h1{font-size:18px;margin-bottom:2px}.sub{color:#888;margin-bottom:18px}
+.cards{display:flex;gap:12px;margin:16px 0 24px}
+.card{flex:1;background:#fafafa;border-radius:8px;padding:14px 16px}
+.clabel{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.cval{font-size:22px;font-weight:700;margin:4px 0}
+.cval .pct{font-size:14px;color:#888;font-weight:400;margin-left:6px}
+.csub{color:#777;font-size:12px}
+.gchip{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;font-size:14px;margin-left:6px;vertical-align:middle}
+.score{font-size:40px;font-weight:700}.slash{color:#bbb;font-size:22px}
+.row{display:flex;align-items:center;margin:6px 0}.cat{width:200px;color:#555}
+.bar{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}
+.bar span{display:block;height:100%;background:#4c1}
+.bar.na{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}
+.num{width:120px;text-align:right;color:#333}
+.flag{color:#b8860b;font-weight:600;font-size:12px}
+.spark{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px;word-break:break-all}
+.headline{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}
+.withheld{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}
+.hint{color:#666;font-size:13px;font-weight:400}
+.caveat{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}
+h2{font-size:15px;margin-top:28px}sub{color:#aaa}
+</style></head><body>
+<h1>Bellwether — AI impact</h1>
+<div class="sub">crown · 2026-02-05 → 2026-06-17 · 19.0 weeks · 726 commits</div>
+
+<div class="cards"><div class='card' style='border-top:3px solid #4477dd'><div class='clabel'>AI Adoption</div><div class='cval'>Pervasive<span class='pct'>97%</span></div><div class='csub'>Claude 705 · lower bound</div></div><div class='card' style='border-top:3px solid #e05d44'><div class='clabel'>Delivery Health</div><div class='cval'>55/100 <span class='gchip' style='background:#e05d44'>F</span></div><div class='csub'>general eng norms</div></div><div class='card' style='border-top:3px solid #97ca00'><div class='clabel'>Readiness</div><div class='cval'>83/100 <span class='gchip' style='background:#97ca00'>B</span></div><div class='csub'>static repo state</div></div></div>
+
+<div class="headline">
+  <b>AI adoption 97.1%</b>
+  <span class="hint">(705/726 commits — lower bound)</span><br>
+  Adoption date: <code>2026-02-02</code>
+  <br>Rate / week: <span class='spark'>███▇█▇▇███████▇████</span>
+</div>
+
+<h2>Delivery Health <span class='hint'>(general norms, NOT AI-attributed)</span></h2><div class='row'><div class='cat'>change_size_discipline</div><div class='bar'><span style='width:100%'></span></div><div class='num'>100% </div></div><div class='row'><div class='cat'>test_discipline</div><div class='bar'><span style='width:10%'></span></div><div class='num'>10% <span class='flag'>low test discipline</span></div></div><div class='row'><div class='cat'>knowledge_distribution</div><div class='bar na'></div><div class='num'>n/a (solo author)</div></div><p class='hint'>Context (not scored): fix/revert 26% · 38.21 commits/wk · 1 contributors.</p>
+
+<h2>Before/after AI Enablement <span class='hint'>(bonus)</span></h2><div class='withheld'>n/a — AI adoption is at or before repo inception — no pre-AI window to compare<br><span class='hint'>A before/after needs a clean pre-AI baseline; the three numbers above stand on their own.</span></div>
+
+<div class="caveat"><b>Attribution caveat.</b> Delivery pillars (flow, quality, risk) measure GENERAL delivery health — only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving — it does NOT prove AI caused any change.</div>
+<p><sub>bellwether v0.1.0 · 2026-06-18T22:49:19Z</sub></p>
+<h2>Readiness — <span style='color:#fff;background:#97ca00;border-radius:5px;padding:0 8px;margin-left:6px'>83/100 · B</span></h2><div class='row'><div class='cat'>entry_point</div><div class='bar'><span style='width:100%'></span></div><div class='num'>20/20</div></div><div class='row'><div class='cat'>agent_instructions</div><div class='bar'><span style='width:100%'></span></div><div class='num'>15/15</div></div><div class='row'><div class='cat'>module_coverage</div><div class='bar'><span style='width:66%'></span></div><div class='num'>13.3/20</div></div><div class='row'><div class='cat'>setup_tooling</div><div class='bar'><span style='width:47%'></span></div><div class='num'>9.4/20</div></div><div class='row'><div class='cat'>doc_integrity</div><div class='bar'><span style='width:100%'></span></div><div class='num'>13/13</div></div><div class='row'><div class='cat'>doc_freshness</div><div class='bar'><span style='width:100%'></span></div><div class='num'>12/12</div></div><h2>Top Readiness fixes (4 total)</h2><ul><li><b>scripts</b> — Module &#x27;scripts&#x27; (dir) has no README<br><span class='fix'>→ Add scripts/README.md describing this module</span></li><li><b>src/scenes</b> — Module &#x27;src/scenes&#x27; (dir) has no README<br><span class='fix'>→ Add src/scenes/README.md describing this module</span></li><li><b>.</b> — Missing CI configuration<br><span class='fix'>→ Add CI (e.g. .github/workflows) so agents can see how it&#x27;s built and tested</span></li><li><b>.</b> — Missing type config<br><span class='fix'>→ Add type config (tsconfig.json / mypy / pyright / py.typed)</span></li></ul></body></html>

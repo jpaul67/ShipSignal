@@ -1,0 +1,400 @@
+{
+  "schema_version": "report-0.1",
+  "repo": "crown",
+  "impact": {
+    "schema_version": "impact-0.2",
+    "repo": "crown",
+    "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
+    "scanned_at": "2026-06-18T22:49:19Z",
+    "attribution_caveat": "Delivery pillars (flow, quality, risk) measure GENERAL delivery health \u2014 only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving \u2014 it does NOT prove AI caused any change.",
+    "window": {
+      "first_commit": "2026-02-05",
+      "last_commit": "2026-06-17",
+      "weeks": 19.0
+    },
+    "adoption": {
+      "ai_coauthor_share": 0.971,
+      "level": "Pervasive",
+      "ai_commits": 705,
+      "total_commits": 726,
+      "adoption_date": "2026-02-02",
+      "adoption_auto_detected": true,
+      "per_tool": {
+        "Claude": 705
+      },
+      "weekly_series": [
+        [
+          "2026-02-02",
+          1.0,
+          20
+        ],
+        [
+          "2026-02-09",
+          1.0,
+          24
+        ],
+        [
+          "2026-02-16",
+          1.0,
+          79
+        ],
+        [
+          "2026-02-23",
+          0.867,
+          15
+        ],
+        [
+          "2026-03-02",
+          1.0,
+          2
+        ],
+        [
+          "2026-03-16",
+          0.984,
+          125
+        ],
+        [
+          "2026-03-23",
+          0.972,
+          36
+        ],
+        [
+          "2026-03-30",
+          1.0,
+          46
+        ],
+        [
+          "2026-04-06",
+          1.0,
+          2
+        ],
+        [
+          "2026-04-13",
+          1.0,
+          28
+        ],
+        [
+          "2026-04-20",
+          1.0,
+          30
+        ],
+        [
+          "2026-04-27",
+          1.0,
+          51
+        ],
+        [
+          "2026-05-04",
+          1.0,
+          18
+        ],
+        [
+          "2026-05-11",
+          1.0,
+          73
+        ],
+        [
+          "2026-05-18",
+          0.875,
+          128
+        ],
+        [
+          "2026-05-25",
+          1.0,
+          22
+        ],
+        [
+          "2026-06-01",
+          1.0,
+          22
+        ],
+        [
+          "2026-06-08",
+          1.0,
+          4
+        ],
+        [
+          "2026-06-15",
+          1.0,
+          1
+        ]
+      ],
+      "note": "Lower bound \u2014 squash-merges drop trailers; gh PR data could recover them."
+    },
+    "metrics": {
+      "flow": {
+        "commits": 726,
+        "span_days": 133,
+        "active_day_ratio": 0.632,
+        "commits_per_week": 38.21
+      },
+      "change_shape": {
+        "median_lines": 31,
+        "p90_lines": 211,
+        "median_files": 1,
+        "large_change_rate": 0.034
+      },
+      "quality": {
+        "fix_rate": 0.26,
+        "fix_commits": 189,
+        "test_to_code_ratio": 0.025,
+        "test_touch_commits": 17,
+        "code_touch_commits": 693
+      },
+      "people": {
+        "contributors": 1,
+        "solo": true,
+        "top_author_share": 1.0,
+        "bus_factor": 1
+      }
+    },
+    "delivery_health": {
+      "status": "scored",
+      "score": 55,
+      "grade": "F",
+      "components": [
+        {
+          "id": "change_size_discipline",
+          "weight": 35,
+          "score_frac": 1.0,
+          "status": "scored",
+          "flag": null
+        },
+        {
+          "id": "test_discipline",
+          "weight": 35,
+          "score_frac": 0.1,
+          "status": "scored",
+          "flag": "low test discipline"
+        },
+        {
+          "id": "knowledge_distribution",
+          "weight": 30,
+          "score_frac": null,
+          "status": "n/a (solo author)",
+          "flag": null
+        }
+      ],
+      "descriptive": {
+        "fix_revert_rate": 0.26,
+        "commits_per_week": 38.21,
+        "active_day_ratio": 0.632,
+        "contributors": 1
+      }
+    },
+    "readiness": {
+      "score": 83,
+      "grade": "B"
+    },
+    "confidence": {
+      "sufficient": true,
+      "reasons": []
+    },
+    "no_baseline": true,
+    "no_baseline_reason": "AI adoption is at or before repo inception \u2014 no pre-AI window to compare",
+    "score": null,
+    "score_status": "withheld",
+    "score_withheld_reason": "AI adoption is at or before repo inception \u2014 no pre-AI window to compare",
+    "pillars": []
+  },
+  "readiness": {
+    "schema_version": "0.1",
+    "repo": "crown",
+    "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
+    "scanned_at": "2026-06-18T22:49:19Z",
+    "score": 83,
+    "grade": "B",
+    "categories": [
+      {
+        "id": "entry_point",
+        "points": 20,
+        "max": 20,
+        "status": "scored"
+      },
+      {
+        "id": "agent_instructions",
+        "points": 15,
+        "max": 15,
+        "status": "scored"
+      },
+      {
+        "id": "module_coverage",
+        "points": 13.3,
+        "max": 20,
+        "status": "scored"
+      },
+      {
+        "id": "setup_tooling",
+        "points": 9.4,
+        "max": 20,
+        "status": "scored"
+      },
+      {
+        "id": "doc_integrity",
+        "points": 13.0,
+        "max": 13,
+        "status": "scored"
+      },
+      {
+        "id": "doc_freshness",
+        "points": 12.0,
+        "max": 12,
+        "status": "scored"
+      }
+    ],
+    "modules": [
+      {
+        "path": ".",
+        "type": "root",
+        "has_readme": true,
+        "readme_path": "README.md",
+        "agent_file": "AGENTS.md",
+        "last_code_commit": "2026-06-17",
+        "waived": false
+      },
+      {
+        "path": "electron",
+        "type": "dir",
+        "has_readme": true,
+        "readme_path": "electron/README.md",
+        "agent_file": null,
+        "last_code_commit": "2026-06-17",
+        "waived": false
+      },
+      {
+        "path": "scripts",
+        "type": "dir",
+        "has_readme": false,
+        "readme_path": null,
+        "agent_file": null,
+        "last_code_commit": "2026-05-12",
+        "waived": false
+      },
+      {
+        "path": "src",
+        "type": "dir",
+        "has_readme": true,
+        "readme_path": "src/README.md",
+        "agent_file": null,
+        "last_code_commit": "2026-06-17",
+        "waived": false
+      },
+      {
+        "path": "src/scenes",
+        "type": "dir",
+        "has_readme": false,
+        "readme_path": null,
+        "agent_file": null,
+        "last_code_commit": "2026-06-10",
+        "waived": false
+      },
+      {
+        "path": "supabase",
+        "type": "dir",
+        "has_readme": true,
+        "readme_path": "supabase/README.md",
+        "agent_file": null,
+        "last_code_commit": "2026-06-17",
+        "waived": false
+      },
+      {
+        "path": "tests",
+        "type": "dir",
+        "has_readme": false,
+        "readme_path": null,
+        "agent_file": null,
+        "last_code_commit": "2026-06-06",
+        "waived": true
+      }
+    ],
+    "findings": [
+      {
+        "detector": "module_readme",
+        "severity": "warn",
+        "path": "scripts",
+        "evidence": "Module 'scripts' (dir) has no README",
+        "fix": "Add scripts/README.md describing this module"
+      },
+      {
+        "detector": "module_readme",
+        "severity": "warn",
+        "path": "src/scenes",
+        "evidence": "Module 'src/scenes' (dir) has no README",
+        "fix": "Add src/scenes/README.md describing this module"
+      },
+      {
+        "detector": "setup",
+        "severity": "warn",
+        "path": ".",
+        "evidence": "Missing CI configuration",
+        "fix": "Add CI (e.g. .github/workflows) so agents can see how it's built and tested"
+      },
+      {
+        "detector": "setup",
+        "severity": "info",
+        "path": ".",
+        "evidence": "Missing formatter config",
+        "fix": "Add a formatter config (prettier / black / ruff / rustfmt)"
+      },
+      {
+        "detector": "setup",
+        "severity": "warn",
+        "path": ".",
+        "evidence": "Missing type config",
+        "fix": "Add type config (tsconfig.json / mypy / pyright / py.typed)"
+      },
+      {
+        "detector": "setup",
+        "severity": "info",
+        "path": ".",
+        "evidence": "Missing .editorconfig",
+        "fix": "Add an .editorconfig for consistent whitespace/style"
+      },
+      {
+        "detector": "setup",
+        "severity": "info",
+        "path": ".",
+        "evidence": "Missing CONTRIBUTING",
+        "fix": "Add CONTRIBUTING with how to build, test, and submit changes"
+      },
+      {
+        "detector": "setup",
+        "severity": "info",
+        "path": ".",
+        "evidence": "Missing LICENSE",
+        "fix": "Add a LICENSE file"
+      }
+    ],
+    "metrics": {
+      "has_root_readme": true,
+      "root_readme_substantial": true,
+      "is_small_repo": false,
+      "code_count": 65,
+      "has_agent_file": true,
+      "has_root_agent_file": true,
+      "modules_total": 6,
+      "modules_covered": 4,
+      "broken_links": 0,
+      "links_checked": 51,
+      "drift_count": 0,
+      "docs_checked": 4,
+      "is_git": true,
+      "mcp_present": false,
+      "setup_score_frac": 0.47058823529411764,
+      "setup_present": [
+        "test_command",
+        "dependency_manifest",
+        "lockfile",
+        "lint_config"
+      ],
+      "setup_missing": [
+        "ci_config",
+        "format_config",
+        "type_config",
+        "editorconfig",
+        "contributing",
+        "license"
+      ]
+    }
+  }
+}

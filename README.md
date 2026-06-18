@@ -7,17 +7,16 @@
 Requires Python 3.11+.
 
 ```bash
-# Readiness lens — repo state, "set up for agents?"
-python -m bellwether.cli scan .                  # scan this repo
-python -m bellwether.cli scan ../crown           # scan a local path
-python -m bellwether.cli scan vitest-dev/vitest  # scan a public GitHub repo
-python -m bellwether.cli scan . --json readiness.json --fail-under 80
+# Unified audit — both lenses, one deliverable (recommended)
+python -m bellwether.cli report ../crown --html crown-audit.html
 
-# Impact lens — git-history analytics, "AI changing how we ship?"
-python -m bellwether.cli impact ../crown
-python -m bellwether.cli impact ../crown --json impact.json --md impact.md
-python -m bellwether.cli impact . --with-readiness     # feed agent_readiness pillar
+# Or run a single lens
+python -m bellwether.cli scan ../crown            # readiness only
+python -m bellwether.cli impact ../crown          # impact only
+python -m bellwether.cli scan . --fail-under 80   # CI gate
 ```
+
+See [examples/crown-audit.html](examples/crown-audit.html) for a real audit deliverable.
 
 Once [uv](https://docs.astral.sh/uv/) is installed it also runs as `uvx bellwether scan <target>` (entry point declared in [pyproject.toml](pyproject.toml)).
 

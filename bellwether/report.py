@@ -399,6 +399,109 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 </body></html>"""
 
 
+# ---------------------------------------------------------------------------
+# Unified report — one command, both lenses, one deliverable.
+# Combines Impact's three-number header + delivery breakdown with the
+# Readiness fix backlog (the missing piece in `impact` alone). This is the
+# format the productized audit ships in.
+# ---------------------------------------------------------------------------
+def _readiness_fix_lines(readiness_result: dict, limit: int = 8) -> list[dict]:
+    warns = [f for f in readiness_result.get("findings", []) if f["severity"] != "info"]
+    return warns[:limit], max(0, len(warns) - limit)
+
+
+def render_unified(impact_result: dict, readiness_result: dict) -> str:
+    """Plain-text CLI rendering — Impact lens header + Readiness fix backlog."""
+    L = [render_impact(impact_result).rstrip()]
+    L.append("")
+    L.append(f"  Readiness {readiness_result['score']}/100 · {readiness_result['grade']}"
+             "  (full breakdown + fixes below)")
+    L.append("")
+    for c in readiness_result["categories"]:
+        if c["status"] == "scored":
+            L.append(f"   {c['id']:<20} {_bar(c['points'], c['max'])} {c['points']:g}/{c['max']:g}")
+        else:
+            L.append(f"   {c['id']:<20} {'·' * 16} {c['status']}")
+    warns, extra = _readiness_fix_lines(readiness_result)
+    L.append("")
+    if warns:
+        L.append(f"  Top Readiness fixes ({len(warns) + extra} total):")
+        for w in warns:
+            L.append(f"   • [{w['severity']}] {w['path']}: {w['evidence']}")
+            L.append(f"       → {w['fix']}")
+        if extra:
+            L.append(f"   … and {extra} more")
+    else:
+        L.append("  Readiness: no warnings — well set up.")
+    L.append("")
+    return "\n".join(L)
+
+
+def render_unified_markdown(impact_result: dict, readiness_result: dict) -> str:
+    """Markdown report combining Impact + Readiness — the audit deliverable."""
+    L = [render_impact_markdown(impact_result).rstrip()]
+    L.append("")
+    L.append(f"## Readiness — {readiness_result['score']}/100 · grade {readiness_result['grade']}")
+    L.append("")
+    L.append("| Category | Score |")
+    L.append("|---|---|")
+    for cid, val, _pct in _cat_rows(readiness_result):
+        L.append(f"| {cid} | {val} |")
+    L.append("")
+    warns, extra = _readiness_fix_lines(readiness_result)
+    if warns:
+        L.append(f"### Top Readiness fixes ({len(warns) + extra} total)")
+        L.append("")
+        for w in warns:
+            L.append(f"- **{w['path']}** — {w['evidence']}  \n  → {w['fix']}")
+        if extra:
+            L.append(f"\n*…and {extra} more in the JSON.*")
+    else:
+        L.append("### Readiness")
+        L.append("")
+        L.append("*No warnings — the repo is well set up for agents.*")
+    L.append("")
+    return "\n".join(L)
+
+
+def render_unified_html(impact_result: dict, readiness_result: dict) -> str:
+    """One-page HTML audit deliverable — Impact three-card header + Readiness fixes."""
+    # We weave the readiness section in BEFORE the closing </body> of the impact HTML,
+    # rather than re-implementing the whole page.
+    impact_html = render_impact_html(impact_result)
+    cat_rows = ""
+    for cid, val, pct in _cat_rows(readiness_result):
+        if pct is None:
+            cat_rows += (f"<div class='row'><div class='cat'>{_esc(cid)}</div>"
+                         f"<div class='bar na'></div><div class='num'>{_esc(val)}</div></div>")
+        else:
+            cat_rows += (f"<div class='row'><div class='cat'>{_esc(cid)}</div>"
+                         f"<div class='bar'><span style='width:{pct:.0f}%'></span></div>"
+                         f"<div class='num'>{_esc(val)}</div></div>")
+    warns, extra = _readiness_fix_lines(readiness_result)
+    if warns:
+        fixes = "".join(
+            f"<li><b>{_esc(w['path'])}</b> — {_esc(w['evidence'])}"
+            f"<br><span class='fix'>→ {_esc(w['fix'])}</span></li>" for w in warns
+        )
+        more = f"<p class='hint'>…and {extra} more in the JSON.</p>" if extra else ""
+        fixes_block = f"<h2>Top Readiness fixes ({len(warns) + extra} total)</h2><ul>{fixes}</ul>{more}"
+    else:
+        fixes_block = "<h2>Readiness fixes</h2><p>None — the repo is well set up for agents.</p>"
+
+    color = GRADE_COLOR.get(readiness_result["grade"], "#9f9f9f")
+    readiness_section = (
+        f"<h2>Readiness — <span style='color:#fff;background:{color};border-radius:5px;"
+        f"padding:0 8px;margin-left:6px'>{readiness_result['score']}/100 · "
+        f"{_esc(readiness_result['grade'])}</span></h2>"
+        f"{cat_rows}{fixes_block}"
+    )
+    # Inject before </body>; fall through to append if the marker isn't found.
+    if "</body>" in impact_html:
+        return impact_html.replace("</body>", readiness_section + "</body>", 1)
+    return impact_html + readiness_section
+
+
 def render_badge(result: dict) -> str:
     label, value = "AI readiness", f"{result['score']}/100"
     color = GRADE_COLOR.get(result["grade"], "#9f9f9f")

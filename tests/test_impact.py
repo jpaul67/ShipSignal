@@ -289,5 +289,38 @@ class TestSelfImpact(unittest.TestCase):
         self.assertGreater(result["adoption"]["ai_coauthor_share"], 0)
 
 
+class TestUnifiedReport(unittest.TestCase):
+    """The audit deliverable: one command, three impact numbers + readiness fixes."""
+
+    @classmethod
+    def setUpClass(cls):
+        from bellwether import report, scanner
+        cls.readiness = scanner.scan(REPO, repo_label="bellwether")
+        cls.impact = compute_impact(REPO, repo_label="bellwether",
+                                    readiness_score=cls.readiness["score"])
+        cls.report = report
+
+    def test_cli_has_all_sections(self):
+        out = self.report.render_unified(self.impact, self.readiness)
+        for marker in ("AI Adoption", "Delivery Health", "Readiness", "Note:"):
+            self.assertIn(marker, out, f"CLI missing: {marker}")
+
+    def test_markdown_has_readiness_block(self):
+        md = self.report.render_unified_markdown(self.impact, self.readiness)
+        self.assertIn("## Readiness", md)
+        # Score and grade should both be in the header
+        self.assertIn(f"{self.readiness['score']}/100", md)
+
+    def test_html_combines_both(self):
+        import html.parser
+        h = self.report.render_unified_html(self.impact, self.readiness)
+        html.parser.HTMLParser().feed(h)  # raises on malformed
+        self.assertIn("AI Adoption", h)
+        self.assertIn("Readiness", h)
+        # The impact's </body> should be replaced — readiness section injected
+        self.assertGreater(h.count("</body>"), 0)
+        self.assertEqual(h.count("</html>"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

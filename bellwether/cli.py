@@ -108,6 +108,43 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _cmd_report(args: argparse.Namespace) -> int:
+    """Unified audit: run both lenses, emit one combined deliverable."""
+    root, label, tmp, err = _resolve_target(args.target)
+    if err:
+        print(f"  {err}", file=sys.stderr)
+        return 2
+    assert root is not None
+    try:
+        readiness_result = scanner.scan(root, repo_label=label)
+        impact_result = impact.compute_impact(
+            root,
+            repo_label=label,
+            adoption_date_override=args.adoption_date,
+            readiness_score=readiness_result.get("score"),
+        )
+        print(report.render_unified(impact_result, readiness_result))
+
+        combined = {
+            "schema_version": "report-0.1",
+            "repo": label,
+            "impact": impact_result,
+            "readiness": readiness_result,
+        }
+        for path, payload in (
+            (args.json, lambda: json.dumps(combined, indent=2, default=str)),
+            (args.md, lambda: report.render_unified_markdown(impact_result, readiness_result)),
+            (args.html, lambda: report.render_unified_html(impact_result, readiness_result)),
+        ):
+            if path:
+                Path(path).write_text(payload(), encoding="utf-8")
+                print(f"  wrote {path}")
+        return 0
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -140,11 +177,21 @@ def main(argv: list[str] | None = None) -> int:
     impact_p.add_argument("--no-readiness", action="store_true",
                           help="skip the readiness scan (the Readiness number shows n/a)")
 
+    report_p = sub.add_parser("report", help="unified audit: both lenses, one deliverable")
+    report_p.add_argument("target", help="local path, https git URL, or owner/repo")
+    report_p.add_argument("--json", metavar="FILE", help="write the combined JSON to FILE")
+    report_p.add_argument("--md", metavar="FILE", help="write a unified Markdown report to FILE")
+    report_p.add_argument("--html", metavar="FILE", help="write a unified HTML report to FILE")
+    report_p.add_argument("--adoption-date", metavar="YYYY-MM-DD", default=None,
+                          help="override the auto-detected adoption date")
+
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return _cmd_scan(args)
     if args.cmd == "impact":
         return _cmd_impact(args)
+    if args.cmd == "report":
+        return _cmd_report(args)
     parser.print_help()
     return 2
 
