@@ -144,9 +144,14 @@ _REC = "__BWREC__"
 _FMT = f"{_REC}%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:only,unfold)"
 
 
-def walk_history(root: Path) -> list[Commit]:
-    """Return commits newest-first. Empty list for a non-git or empty repo."""
-    out = gitinfo._run(["git", "log", "--numstat", f"--format={_FMT}"], root)
+def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
+    """Return commits newest-first. Empty list for a non-git or empty repo.
+
+    Default 10-minute timeout covers very large OSS histories (vitest, express,
+    linux-sized). The readiness lens keeps the lower default — a single git log
+    --numstat pass on a 6000-commit treeless clone is the slowest thing we do.
+    """
+    out = gitinfo._run(["git", "log", "--numstat", f"--format={_FMT}"], root, timeout=timeout)
     if not out:
         return []
     commits: list[Commit] = []
@@ -438,7 +443,22 @@ def compute_impact(
 
     commits = walk_history(root)  # newest-first
     if not commits:
-        result["error"] = "no commit history"
+        # Distinguish a truly empty repo from a failed/timed-out git log
+        # (the latter happens on huge treeless clones where --numstat is slow).
+        rev_count_raw = gitinfo._run(["git", "rev-list", "--count", "HEAD"], root)
+        try:
+            n = int(rev_count_raw.strip()) if rev_count_raw else 0
+        except ValueError:
+            n = 0
+        if n > 0:
+            result["error"] = (
+                f"git log --numstat failed or timed out — repo has {n} commits but the "
+                "history walk did not complete. On treeless clones (--filter=blob:none), "
+                "--numstat may need to fetch blobs on demand and slow drastically on huge "
+                "histories. Try cloning with full blobs."
+            )
+        else:
+            result["error"] = "no commit history"
         return result
 
     result["commit_sha"] = gitinfo.head_sha(root)

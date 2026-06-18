@@ -10,13 +10,29 @@ import subprocess
 from pathlib import Path
 
 
+# Read-only safety flags injected into every `git` call:
+#   gc.auto=0          — git's background auto-gc otherwise triggers during a
+#                        long `log` and can abort with code 128 mid-output on
+#                        large OSS repos. We never want a scanner to mutate the
+#                        target repo.
+#   maintenance.auto=false — same intent for the newer maintenance machinery.
+_GIT_SAFE_FLAGS = ["-c", "gc.auto=0", "-c", "maintenance.auto=false"]
+
+
 def _run(args: list[str], cwd: Path | None = None, timeout: int = 120) -> str | None:
+    if args and args[0] == "git":
+        args = [args[0], *_GIT_SAFE_FLAGS, *args[1:]]
+    # Explicit UTF-8 with replacement: git's default output encoding is UTF-8,
+    # but Python on Windows would otherwise pick cp1252 and crash on the first
+    # non-Latin-1 byte (real bug found scanning mature OSS commit histories).
     try:
         res = subprocess.run(
             args,
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except Exception:
