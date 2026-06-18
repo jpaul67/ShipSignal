@@ -9,16 +9,17 @@ Bellwether v0 — a read-only, LLM-free **agent-readiness scanner**. It grades a
 ## Commands
 
 - Run a scan: `python -m bellwether.cli scan <path | url | owner/repo>`
-- JSON + CI gate: `python -m bellwether.cli scan . --json readiness.json --fail-under 80`
-- Tests: `python -m unittest discover -s tests -v`
-- Dogfood (the repo should pass its own scan): `python -m bellwether.cli scan . --fail-under 80`
+- Reports: `--json FILE` · `--md FILE` · `--html FILE` · `--badge FILE`; CI gate: `--fail-under N`
+- Tests: `python -m unittest discover -s tests -v` (or `make test`)
+- Dogfood (the repo passes its own scan): `python -m bellwether.cli scan . --fail-under 90` (or `make scan`)
 
 ## Architecture
 
 Pipeline: `cli` → `scanner` → (`modules` → `detectors` → `scoring`) → `report`.
 
 - [bellwether/modules.py](bellwether/modules.py) — module detection + exclusions. **Ecosystem-aware first** (npm/pnpm/Cargo workspaces, anywhere in the tree), directory heuristic only as fallback. This is the part that most affects accuracy.
-- [bellwether/detectors.py](bellwether/detectors.py) — the static detectors and their false-positive guards.
+- [bellwether/detectors.py](bellwether/detectors.py) — doc/agent detectors and their false-positive guards.
+- [bellwether/setupcheck.py](bellwether/setupcheck.py) — setup & convention detectors (build/test discoverability, lint/type config, MCP resolution).
 - [bellwether/scoring.py](bellwether/scoring.py) — the 0–100 model.
 - [bellwether/gitinfo.py](bellwether/gitinfo.py) — git via subprocess.
 

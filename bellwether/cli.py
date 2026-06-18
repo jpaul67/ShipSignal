@@ -36,6 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     scan_p = sub.add_parser("scan", help="scan a local path or a public repo")
     scan_p.add_argument("target", help="local path, https git URL, or owner/repo")
     scan_p.add_argument("--json", metavar="FILE", help="write readiness.json to FILE")
+    scan_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
+    scan_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
+    scan_p.add_argument("--badge", metavar="FILE", help="write a readiness badge SVG to FILE")
     scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
                         help="exit non-zero if the score is below N")
     args = parser.parse_args(argv)
@@ -67,9 +70,15 @@ def main(argv: list[str] | None = None) -> int:
         result = scanner.scan(root, repo_label=label)
         print(report.render(result))
 
-        if args.json:
-            Path(args.json).write_text(json.dumps(result, indent=2), encoding="utf-8")
-            print(f"  wrote {args.json}")
+        for path, payload in (
+            (args.json, lambda: json.dumps(result, indent=2)),
+            (args.md, lambda: report.render_markdown(result)),
+            (args.html, lambda: report.render_html(result)),
+            (args.badge, lambda: report.render_badge(result)),
+        ):
+            if path:
+                Path(path).write_text(payload(), encoding="utf-8")
+                print(f"  wrote {path}")
 
         if args.fail_under is not None and result["score"] < args.fail_under:
             print(f"  FAIL: score {result['score']} < --fail-under {args.fail_under}", file=sys.stderr)

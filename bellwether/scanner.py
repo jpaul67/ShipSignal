@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import detectors, gitinfo, scoring
+from . import detectors, gitinfo, scoring, setupcheck
 from . import modules as mod
 
 
@@ -12,6 +12,9 @@ def scan(root: Path, repo_label: str | None = None) -> dict:
     files, is_git = mod.list_files(root)
     modules, agent_files = mod.detect_modules(root, files, is_git)
     findings, metrics = detectors.run_detectors(root, files, modules, agent_files, is_git)
+    setup_findings, setup_metrics = setupcheck.detect_setup(root, files, metrics["mcp_present"])
+    findings = findings + setup_findings
+    metrics.update(setup_metrics)
     score, grade, categories = scoring.score_scan(metrics)
     return {
         "schema_version": "0.1",

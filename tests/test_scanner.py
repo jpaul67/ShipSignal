@@ -49,7 +49,7 @@ class TestScoring(unittest.TestCase):
         m = dict(has_root_readme=True, root_readme_substantial=True, is_small_repo=True,
                  code_count=5, has_agent_file=False, has_root_agent_file=False,
                  modules_total=1, modules_covered=1, broken_links=0, drift_count=0,
-                 is_git=True, mcp_present=False)
+                 is_git=True, mcp_present=False, setup_score_frac=1.0)
         score, grade, cats = score_scan(m)
         agent = next(c for c in cats if c.id == "agent_instructions")
         self.assertEqual(agent.status, "n/a")
@@ -58,6 +58,21 @@ class TestScoring(unittest.TestCase):
     def test_grade_bands(self):
         self.assertEqual(grade_for(95), "A")
         self.assertEqual(grade_for(27), "F")
+
+
+class TestSetup(unittest.TestCase):
+    def test_setup_category_present(self):
+        r = scanner.scan(REPO, repo_label="bellwether")
+        setup = next((c for c in r["categories"] if c["id"] == "setup_tooling"), None)
+        self.assertIsNotNone(setup)
+        self.assertEqual(setup["status"], "scored")
+
+    def test_detect_setup_frac_range(self):
+        from bellwether import modules as mod
+        from bellwether.setupcheck import detect_setup
+        files, _ = mod.list_files(REPO)
+        _findings, m = detect_setup(REPO, files, mcp_present=False)
+        self.assertTrue(0.0 <= m["setup_score_frac"] <= 1.0)
 
 
 if __name__ == "__main__":
