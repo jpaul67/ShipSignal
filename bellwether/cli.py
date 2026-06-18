@@ -1,4 +1,4 @@
-"""`bellwether scan <path | url | owner/repo>` — the v0 CLI."""
+"""`bellwether <scan|impact> <path | url | owner/repo>` — the CLI."""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import gitinfo, report, scanner
+from . import gitinfo, impact, report, scanner
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -24,52 +24,34 @@ def _resolve_url(target: str) -> str:
     return target
 
 
-def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")  # avoid cp1252 crashes on Windows
-        except Exception:
-            pass
+def _resolve_target(target: str) -> tuple[Path | None, str, Path | None, str | None]:
+    """Return (root, label, tmp_dir_to_cleanup, error). root is None on error."""
+    local = Path(target)
+    if local.exists():
+        resolved = local.resolve()
+        return resolved, resolved.name, None, None
+    if _looks_like_url(target):
+        url = _resolve_url(target)
+        tmp = Path(tempfile.mkdtemp(prefix="bw_"))
+        root = tmp / "repo"
+        print(f"  cloning {url} …")
+        ok, err = gitinfo.clone(url, root)
+        if not ok:
+            shutil.rmtree(tmp, ignore_errors=True)
+            return None, "", None, f"clone failed: {err.strip()[:200]}"
+        return root, target, tmp, None
+    return None, "", None, f"not a path or recognizable repo: {target}"
 
-    parser = argparse.ArgumentParser(prog="bellwether", description="Agent-readiness scanner")
-    sub = parser.add_subparsers(dest="cmd")
-    scan_p = sub.add_parser("scan", help="scan a local path or a public repo")
-    scan_p.add_argument("target", help="local path, https git URL, or owner/repo")
-    scan_p.add_argument("--json", metavar="FILE", help="write readiness.json to FILE")
-    scan_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
-    scan_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
-    scan_p.add_argument("--badge", metavar="FILE", help="write a readiness badge SVG to FILE")
-    scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
-                        help="exit non-zero if the score is below N")
-    args = parser.parse_args(argv)
 
-    if args.cmd != "scan":
-        parser.print_help()
+def _cmd_scan(args: argparse.Namespace) -> int:
+    root, label, tmp, err = _resolve_target(args.target)
+    if err:
+        print(f"  {err}", file=sys.stderr)
         return 2
-
-    target = args.target
-    tmp: Path | None = None
+    assert root is not None
     try:
-        local = Path(target)
-        if local.exists():
-            root, label = local.resolve(), local.resolve().name
-        elif _looks_like_url(target):
-            url = _resolve_url(target)
-            tmp = Path(tempfile.mkdtemp(prefix="bw_"))
-            root = tmp / "repo"
-            print(f"  cloning {url} …")
-            ok, err = gitinfo.clone(url, root)
-            if not ok:
-                print(f"  clone failed: {err.strip()[:200]}", file=sys.stderr)
-                return 2
-            label = target
-        else:
-            print(f"  not a path or recognizable repo: {target}", file=sys.stderr)
-            return 2
-
         result = scanner.scan(root, repo_label=label)
         print(report.render(result))
-
         for path, payload in (
             (args.json, lambda: json.dumps(result, indent=2)),
             (args.md, lambda: report.render_markdown(result)),
@@ -79,14 +61,91 @@ def main(argv: list[str] | None = None) -> int:
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
                 print(f"  wrote {path}")
-
         if args.fail_under is not None and result["score"] < args.fail_under:
-            print(f"  FAIL: score {result['score']} < --fail-under {args.fail_under}", file=sys.stderr)
+            print(f"  FAIL: score {result['score']} < --fail-under {args.fail_under}",
+                  file=sys.stderr)
             return 1
         return 0
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _cmd_impact(args: argparse.Namespace) -> int:
+    root, label, tmp, err = _resolve_target(args.target)
+    if err:
+        print(f"  {err}", file=sys.stderr)
+        return 2
+    assert root is not None
+    try:
+        # Optional readiness score for the agent_readiness pillar.
+        readiness_score: int | None = None
+        if args.with_readiness:
+            try:
+                readiness_score = scanner.scan(root, repo_label=label)["score"]
+            except Exception as exc:  # pragma: no cover
+                print(f"  warning: readiness scan failed ({exc}); pillar will be n/a",
+                      file=sys.stderr)
+        result = impact.compute_impact(
+            root,
+            repo_label=label,
+            adoption_date_override=args.adoption_date,
+            readiness_score=readiness_score,
+        )
+        print(report.render_impact(result))
+        for path, payload in (
+            (args.json, lambda: json.dumps(result, indent=2, default=str)),
+            (args.md, lambda: report.render_impact_markdown(result)),
+            (args.html, lambda: report.render_impact_html(result)),
+        ):
+            if path:
+                Path(path).write_text(payload(), encoding="utf-8")
+                print(f"  wrote {path}")
+        return 0
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # avoid cp1252 crashes on Windows
+        except Exception:
+            pass
+
+    parser = argparse.ArgumentParser(
+        prog="bellwether",
+        description="AI readiness & impact scanner — local, read-only.",
+    )
+    sub = parser.add_subparsers(dest="cmd")
+
+    scan_p = sub.add_parser("scan", help="readiness lens — is the repo set up for agents?")
+    scan_p.add_argument("target", help="local path, https git URL, or owner/repo")
+    scan_p.add_argument("--json", metavar="FILE", help="write readiness.json to FILE")
+    scan_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
+    scan_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
+    scan_p.add_argument("--badge", metavar="FILE", help="write a readiness badge SVG to FILE")
+    scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
+                        help="exit non-zero if the score is below N")
+
+    impact_p = sub.add_parser("impact", help="impact lens — is AI changing how the team ships?")
+    impact_p.add_argument("target", help="local path, https git URL, or owner/repo")
+    impact_p.add_argument("--json", metavar="FILE", help="write impact.json to FILE")
+    impact_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
+    impact_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
+    impact_p.add_argument("--adoption-date", metavar="YYYY-MM-DD", default=None,
+                          help="override the auto-detected adoption date")
+    impact_p.add_argument("--with-readiness", action="store_true",
+                          help="also run the readiness scan and feed the agent_readiness pillar")
+
+    args = parser.parse_args(argv)
+    if args.cmd == "scan":
+        return _cmd_scan(args)
+    if args.cmd == "impact":
+        return _cmd_impact(args)
+    parser.print_help()
+    return 2
 
 
 if __name__ == "__main__":
