@@ -2,22 +2,22 @@
 import unittest
 from pathlib import Path
 
-from bellwether import scanner
-from bellwether.modules import _parse_pnpm_packages, _code_dirs
-from bellwether.detectors import _drifted, _skip_link
-from bellwether.scoring import score_scan, grade_for
+from shipsignal import scanner
+from shipsignal.modules import _parse_pnpm_packages, _code_dirs
+from shipsignal.detectors import _drifted, _skip_link
+from shipsignal.scoring import score_scan, grade_for
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 class TestSelfScan(unittest.TestCase):
     def test_scans_self(self):
-        result = scanner.scan(REPO, repo_label="bellwether")
+        result = scanner.scan(REPO, repo_label="shipsignal")
         self.assertIn("score", result)
         self.assertTrue(0 <= result["score"] <= 100)
         self.assertTrue(any(m["path"] == "." for m in result["modules"]))
         # the package dir should be detected as a module
-        self.assertTrue(any(m["path"] == "bellwether" for m in result["modules"]))
+        self.assertTrue(any(m["path"] == "shipsignal" for m in result["modules"]))
 
 
 class TestPnpmParse(unittest.TestCase):
@@ -62,14 +62,14 @@ class TestScoring(unittest.TestCase):
 
 class TestSetup(unittest.TestCase):
     def test_setup_category_present(self):
-        r = scanner.scan(REPO, repo_label="bellwether")
+        r = scanner.scan(REPO, repo_label="shipsignal")
         setup = next((c for c in r["categories"] if c["id"] == "setup_tooling"), None)
         self.assertIsNotNone(setup)
         self.assertEqual(setup["status"], "scored")
 
     def test_detect_setup_frac_range(self):
-        from bellwether import modules as mod
-        from bellwether.setupcheck import detect_setup
+        from shipsignal import modules as mod
+        from shipsignal.setupcheck import detect_setup
         files, _ = mod.list_files(REPO)
         _findings, m = detect_setup(REPO, files, mcp_present=False)
         self.assertTrue(0.0 <= m["setup_score_frac"] <= 1.0)

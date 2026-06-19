@@ -1,4 +1,4 @@
-"""`bellwether <scan|impact> <path | url | owner/repo>` — the CLI."""
+"""`shipsignal <scan|impact> <path | url | owner/repo>` — the CLI."""
 from __future__ import annotations
 
 import argparse
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             pass
 
     parser = argparse.ArgumentParser(
-        prog="bellwether",
+        prog="shipsignal",
         description="AI readiness & impact scanner — local, read-only.",
     )
     sub = parser.add_subparsers(dest="cmd")

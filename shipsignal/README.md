@@ -1,4 +1,4 @@
-# bellwether/ — package module map
+# shipsignal/ — package module map
 
 Pure static analysis (Readiness) + git-history analytics (Impact), stdlib only. Conventions are in [../CLAUDE.md](../CLAUDE.md).
 

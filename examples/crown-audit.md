@@ -1,4 +1,4 @@
-# Bellwether — AI impact: crown
+# ShipSignal — AI impact: crown
 
 **2026-02-05 → 2026-06-17 · 19.0 weeks · 726 commits**
 
@@ -34,7 +34,7 @@
 
 > Delivery pillars (flow, quality, risk) measure GENERAL delivery health — only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving — it does NOT prove AI caused any change.
 
-<sub>bellwether v0.1.0 · 2026-06-18T22:49:19Z</sub>
+<sub>shipsignal v0.1.0 · 2026-06-19T20:49:45Z</sub>
 
 ## Readiness — 83/100 · grade B
 

@@ -15,4 +15,4 @@ jobs:
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Self-scan (dogfood gate)
-        run: python -m bellwether.cli scan . --fail-under 90
+        run: python -m shipsignal.cli scan . --fail-under 90

@@ -28,7 +28,7 @@ def _sparkline(values: list[float], max_val: float | None = None) -> str:
 def render(result: dict) -> str:
     out = []
     out.append("")
-    out.append(f"  Bellwether agent-readiness — {result['repo']}")
+    out.append(f"  ShipSignal readiness — {result['repo']}")
     out.append(f"  Score: {result['score']}/100   (grade {result['grade']})")
     out.append("")
     for c in result["categories"]:
@@ -62,7 +62,7 @@ def _cat_rows(result):
 
 
 def render_markdown(result: dict) -> str:
-    L = [f"# Bellwether — AI readiness: {result['repo']}", "",
+    L = [f"# ShipSignal — AI readiness: {result['repo']}", "",
          f"**Score: {result['score']}/100 — grade {result['grade']}**", "",
          "| Category | Score |", "|---|---|"]
     for cid, val, _pct in _cat_rows(result):
@@ -75,7 +75,7 @@ def render_markdown(result: dict) -> str:
     if infos:
         L += ["", "## Optional", ""]
         L += [f"- {f['path']} — {f['evidence']}" for f in infos]
-    L += ["", f"<sub>bellwether v{__version__} · {result['scanned_at']}</sub>", ""]
+    L += ["", f"<sub>shipsignal v{__version__} · {result['scanned_at']}</sub>", ""]
     return "\n".join(L)
 
 
@@ -108,12 +108,12 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .num{{width:74px;text-align:right;color:#333}}h2{{font-size:15px;margin-top:28px}}
 ul{{padding-left:18px}}li{{margin:8px 0}}.fix{{color:#666}}sub{{color:#aaa}}
 </style></head><body>
-<h1>Bellwether — AI readiness</h1><div class="sub">{_esc(result['repo'])}</div>
+<h1>ShipSignal — AI readiness</h1><div class="sub">{_esc(result['repo'])}</div>
 <p><span class="score">{result['score']}</span><span class="slash">/100</span>
 <span class="grade">{_esc(result['grade'])}</span></p>
 {rows}
 <h2>Top fixes ({len(warns)})</h2><ul>{fixes}</ul>
-<p><sub>bellwether v{__version__} · {_esc(result['scanned_at'])}</sub></p>
+<p><sub>shipsignal v{__version__} · {_esc(result['scanned_at'])}</sub></p>
 </body></html>"""
 
 
@@ -127,7 +127,7 @@ def _adoption_headline(adoption: dict) -> str:
 
 
 def render_impact(result: dict) -> str:
-    L: list[str] = ["", f"  Bellwether impact — {result['repo']}"]
+    L: list[str] = ["", f"  ShipSignal impact — {result['repo']}"]
     if result.get("error"):
         L += [f"  error: {result['error']}", ""]
         return "\n".join(L)
@@ -205,7 +205,7 @@ def render_impact(result: dict) -> str:
 
 def render_impact_markdown(result: dict) -> str:
     if result.get("error"):
-        return f"# Bellwether impact — {result['repo']}\n\n**Error:** {result['error']}\n"
+        return f"# ShipSignal impact — {result['repo']}\n\n**Error:** {result['error']}\n"
     w = result["window"]
     ad = result["adoption"]
     dh = result["delivery_health"]
@@ -218,7 +218,7 @@ def render_impact_markdown(result: dict) -> str:
     ready_cell = f"{rd['score']}/100 · {rd['grade']}" if rd else "—"
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())) if ad.get("per_tool") else "—"
 
-    L = [f"# Bellwether — AI impact: {result['repo']}", "",
+    L = [f"# ShipSignal — AI impact: {result['repo']}", "",
          f"**{w['first_commit']} → {w['last_commit']} · {w['weeks']} weeks · "
          f"{ad['total_commits']} commits**", "",
          "| | Result | |", "|---|---|---|",
@@ -266,7 +266,7 @@ def render_impact_markdown(result: dict) -> str:
     L.append("")
 
     L += ["## Attribution caveat", "", f"> {result['attribution_caveat']}", "",
-          f"<sub>bellwether v{__version__} · {result['scanned_at']}</sub>", ""]
+          f"<sub>shipsignal v{__version__} · {result['scanned_at']}</sub>", ""]
     return "\n".join(L)
 
 
@@ -283,7 +283,7 @@ def _stat_card(label: str, value: str, grade: str | None, sub: str) -> str:
 def render_impact_html(result: dict) -> str:
     if result.get("error"):
         return (f"<!doctype html><meta charset='utf-8'><title>impact error</title>"
-                f"<h1>Bellwether impact — {_esc(result['repo'])}</h1>"
+                f"<h1>ShipSignal impact — {_esc(result['repo'])}</h1>"
                 f"<p><b>Error:</b> {_esc(result['error'])}</p>")
     w = result["window"]
     ad = result["adoption"]
@@ -378,7 +378,7 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 </style></head><body>
-<h1>Bellwether — AI impact</h1>
+<h1>ShipSignal — AI impact</h1>
 <div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} · {w['weeks']} weeks · {ad['total_commits']} commits</div>
 
 <div class="cards">{cards}</div>
@@ -395,7 +395,7 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 {bonus_block}
 
 <div class="caveat"><b>Attribution caveat.</b> {_esc(result['attribution_caveat'])}</div>
-<p><sub>bellwether v{__version__} · {_esc(result['scanned_at'])}</sub></p>
+<p><sub>shipsignal v{__version__} · {_esc(result['scanned_at'])}</sub></p>
 </body></html>"""
 
 

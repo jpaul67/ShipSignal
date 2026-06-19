@@ -3,21 +3,26 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bellwether"
+name = "shipsignal"
 version = "0.1.0"
-description = "Agent-readiness scanner — is your codebase set up for AI agents to succeed?"
+description = "AI impact, delivery-health & readiness scanner — is AI actually changing how your team ships?"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Jeremy Petersen" }]
-keywords = ["ai", "agents", "codebase", "readiness", "static-analysis"]
+keywords = ["ai", "agents", "impact", "delivery", "readiness", "git", "static-analysis", "dora"]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/jpaul67/shipsignal"
+Repository = "https://github.com/jpaul67/shipsignal"
+Issues = "https://github.com/jpaul67/shipsignal/issues"
+
 [project.scripts]
-bellwether = "bellwether.cli:main"
+shipsignal = "shipsignal.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["bellwether"]
+packages = ["shipsignal"]
 
 [tool.ruff]
 line-length = 100

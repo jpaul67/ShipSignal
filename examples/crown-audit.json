@@ -5,7 +5,7 @@
     "schema_version": "impact-0.2",
     "repo": "crown",
     "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
-    "scanned_at": "2026-06-18T22:49:19Z",
+    "scanned_at": "2026-06-19T20:49:45Z",
     "attribution_caveat": "Delivery pillars (flow, quality, risk) measure GENERAL delivery health \u2014 only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving \u2014 it does NOT prove AI caused any change.",
     "window": {
       "first_commit": "2026-02-05",
@@ -201,7 +201,7 @@
     "schema_version": "0.1",
     "repo": "crown",
     "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
-    "scanned_at": "2026-06-18T22:49:19Z",
+    "scanned_at": "2026-06-19T20:49:45Z",
     "score": 83,
     "grade": "B",
     "categories": [

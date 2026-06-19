@@ -3,8 +3,8 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from bellwether import impact
-from bellwether.impact import (
+from shipsignal import impact
+from shipsignal.impact import (
     Commit,
     adoption_level,
     assess_confidence,
@@ -253,39 +253,39 @@ class TestDeliveryHealth(unittest.TestCase):
 class TestThreeNumbersAlwaysPresent(unittest.TestCase):
     """The whole point of the redesign: a scan is never empty."""
     def test_keys_present(self):
-        result = compute_impact(REPO, repo_label="bellwether", readiness_score=100)
+        result = compute_impact(REPO, repo_label="shipsignal", readiness_score=100)
         self.assertIn("level", result["adoption"])
         self.assertIn("delivery_health", result)
         self.assertEqual(result["readiness"], {"score": 100, "grade": "A"})
 
     def test_adoption_level_never_withheld(self):
-        # Even on bellwether's tiny history, adoption level is a real value.
-        result = compute_impact(REPO, repo_label="bellwether")
+        # Even on shipsignal's tiny history, adoption level is a real value.
+        result = compute_impact(REPO, repo_label="shipsignal")
         self.assertIn(result["adoption"]["level"],
                       {"None", "Emerging", "Established", "Pervasive"})
 
 
 class TestSelfImpact(unittest.TestCase):
-    """End-to-end: bellwether scanning itself.
+    """End-to-end: shipsignal scanning itself.
 
     Asserts shape and the canonical 'tool honest enough to refuse to score itself'
     behavior — not exact numbers (history will grow).
     """
     def test_self_scan_shape(self):
-        result = compute_impact(REPO, repo_label="bellwether")
+        result = compute_impact(REPO, repo_label="shipsignal")
         for key in ("schema_version", "repo", "window", "adoption", "metrics",
                     "confidence", "no_baseline", "score", "score_status",
                     "attribution_caveat"):
             self.assertIn(key, result)
-        self.assertEqual(result["repo"], "bellwether")
+        self.assertEqual(result["repo"], "shipsignal")
 
     def test_attribution_caveat_present(self):
-        result = compute_impact(REPO, repo_label="bellwether")
+        result = compute_impact(REPO, repo_label="shipsignal")
         self.assertIn("does NOT prove AI caused", result["attribution_caveat"])
 
     def test_ai_adoption_signal_present(self):
-        # bellwether IS AI-built; share should be > 0.
-        result = compute_impact(REPO, repo_label="bellwether")
+        # shipsignal IS AI-built; share should be > 0.
+        result = compute_impact(REPO, repo_label="shipsignal")
         self.assertGreater(result["adoption"]["ai_coauthor_share"], 0)
 
 
@@ -294,9 +294,9 @@ class TestUnifiedReport(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from bellwether import report, scanner
-        cls.readiness = scanner.scan(REPO, repo_label="bellwether")
-        cls.impact = compute_impact(REPO, repo_label="bellwether",
+        from shipsignal import report, scanner
+        cls.readiness = scanner.scan(REPO, repo_label="shipsignal")
+        cls.impact = compute_impact(REPO, repo_label="shipsignal",
                                     readiness_score=cls.readiness["score"])
         cls.report = report
 

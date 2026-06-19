@@ -1,13 +1,13 @@
 # Sample audits
 
-Real `bellwether report` output, committed for reference / case-study use.
+Real `shipsignal report` output, committed for reference / case-study use.
 
 ## crown — Jeremy's "crownhunter" Phaser 4 game
 
 A 97%-AI-built solo game. Generated with:
 
 ```bash
-python -m bellwether.cli report ../crown --html crown-audit.html --md crown-audit.md --json crown-audit.json
+python -m shipsignal.cli report ../crown --html crown-audit.html --md crown-audit.md --json crown-audit.json
 ```
 
 - [crown-audit.html](crown-audit.html) — the one-page audit deliverable (open in a browser)
