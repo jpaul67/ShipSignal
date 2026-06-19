@@ -8,6 +8,7 @@ from shipsignal.impact import (
     Commit,
     adoption_level,
     assess_confidence,
+    baseline_gate,
     compute_impact,
     delivery_health,
     detect_adoption_date,
@@ -167,6 +168,30 @@ class TestQualityAndFlow(unittest.TestCase):
             commits.append(_c(date_str=f"2026-01-{d:02d}"))
         f = flow_metrics(commits)
         self.assertGreater(f["commits_per_week"], 0)
+
+
+class TestBaselineGate(unittest.TestCase):
+    """The before/after delta needs enough commits AND enough post-adoption TIME."""
+
+    def test_too_few_commits(self):
+        ok, reason = baseline_gate(n_baseline=5, n_current=30, current_weeks=12)
+        self.assertFalse(ok)
+        self.assertIn("need", reason)
+
+    def test_short_post_adoption_window_withholds(self):
+        # juglr's failure mode: plenty of commits, but a 3-week tail burst.
+        ok, reason = baseline_gate(n_baseline=30, n_current=25, current_weeks=3.1)
+        self.assertFalse(ok)
+        self.assertIn("too short", reason)
+
+    def test_earns_when_both_clear(self):
+        ok, reason = baseline_gate(n_baseline=30, n_current=30, current_weeks=10)
+        self.assertTrue(ok)
+        self.assertIsNone(reason)
+
+    def test_boundary_exactly_min_weeks(self):
+        ok, _ = baseline_gate(n_baseline=20, n_current=20, current_weeks=6.0)
+        self.assertTrue(ok)
 
 
 class TestAdoptionLevel(unittest.TestCase):

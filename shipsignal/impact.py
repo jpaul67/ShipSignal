@@ -70,6 +70,12 @@ MIN_COMMITS_FOR_SCORE = 50
 MIN_WEEKS_FOR_SCORE = 6
 MIN_BASELINE_COMMITS = 20
 MIN_CURRENT_COMMITS = 20
+# The post-adoption window must also span enough TIME, not just enough commits —
+# 20 commits crammed into a 3-week tail is a burst, not a trend, and produces a
+# noisy before/after that invites the exact "AI made it worse" misread the
+# attribution caveat warns against. (Found calibrating juglr-next-step: a 3.1-week
+# tail scored a misleading 16/100.)
+MIN_CURRENT_WEEKS = 6
 
 # Delivery-health (snapshot) needs far less — just enough to not be pure noise.
 MIN_COMMITS_FOR_HEALTH = 20
@@ -518,6 +524,21 @@ def _risk_score(baseline: list[Commit], current: list[Commit]) -> float:
     return _pillar_pts(20, _direction_score(c, b, lower_is_better=True))
 
 
+def baseline_gate(n_baseline: int, n_current: int, current_weeks: float) -> tuple[bool, str | None]:
+    """Decide whether a before/after delta is earnable. Returns (ok, reason_if_not).
+
+    Two hurdles: enough commits on BOTH sides, and a post-adoption window that
+    spans enough TIME (so a short commit burst can't masquerade as a trend).
+    """
+    if n_baseline < MIN_BASELINE_COMMITS or n_current < MIN_CURRENT_COMMITS:
+        return False, (f"baseline {n_baseline}c / current {n_current}c — "
+                       f"need {MIN_BASELINE_COMMITS} each")
+    if current_weeks < MIN_CURRENT_WEEKS:
+        return False, (f"post-adoption window is only {current_weeks:.1f} weeks "
+                       f"(need {MIN_CURRENT_WEEKS}) — too short to be a trend, not a burst")
+    return True, None
+
+
 def compute_pillars(baseline: list[Commit], current: list[Commit],
                     readiness_score: int | None = None) -> list[dict]:
     pillars: list[dict] = [
@@ -660,11 +681,10 @@ def compute_impact(
         baseline_start = adoption_dt - timedelta(weeks=BASELINE_WEEKS)
         baseline = [c for c in commits if baseline_start <= c.date < adoption_dt]
         current = [c for c in commits if c.date >= adoption_dt]
-        if len(baseline) < MIN_BASELINE_COMMITS or len(current) < MIN_CURRENT_COMMITS:
-            score_reason = (
-                f"baseline {len(baseline)}c / current {len(current)}c — "
-                f"need {MIN_BASELINE_COMMITS} each"
-            )
+        current_weeks = (last_date - adoption_dt).days / 7
+        ok, reason = baseline_gate(len(baseline), len(current), current_weeks)
+        if not ok:
+            score_reason = reason
         else:
             pillars = compute_pillars(baseline, current, readiness_score)
             scored = [p for p in pillars if p.get("pts") is not None]
@@ -674,6 +694,7 @@ def compute_impact(
             result["window"]["adoption_date"] = adoption_dt.isoformat()
             result["window"]["baseline_commits"] = len(baseline)
             result["window"]["current_commits"] = len(current)
+            result["window"]["current_weeks"] = round(current_weeks, 1)
 
     result["score"] = score
     result["score_status"] = score_status
