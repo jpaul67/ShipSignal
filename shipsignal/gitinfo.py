@@ -67,11 +67,20 @@ def last_commit_date(root: Path, path: str) -> str | None:
     return out.strip() if out and out.strip() else None
 
 
-def clone(url: str, dest: Path, timeout: int = 600) -> tuple[bool, str]:
-    """Treeless clone (full history, blobs on demand) — fast and freshness-safe."""
+def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
+    """Clone a repo for scanning. Always full history (never ``--depth``: freshness,
+    adoption detection, and the before/after delta all need the whole commit graph).
+
+    ``treeless=True`` (default, ``--filter=blob:none``): fast and small — all the
+    Readiness lens needs. ``treeless=False``: a normal clone *with* blobs — the
+    Impact lens needs them, because ``git log --numstat`` computes per-commit line
+    counts; on a treeless clone that triggers an on-demand blob fetch per commit and
+    crawls (or times out) on large histories.
+    """
+    flt = ["--filter=blob:none"] if treeless else []
     try:
         res = subprocess.run(
-            ["git", "clone", "--filter=blob:none", "--single-branch", url, str(dest)],
+            ["git", "clone", *flt, "--single-branch", url, str(dest)],
             capture_output=True,
             text=True,
             timeout=timeout,

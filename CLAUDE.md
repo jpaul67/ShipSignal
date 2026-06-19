@@ -41,7 +41,7 @@ Pipelines:
 - **n/a vs indeterminate vs scored** are distinct in [scoring.py](shipsignal/scoring.py) — preserve the distinction; the readiness score renormalizes over scored categories only.
 - **Impact lens is honest by construction.** Three always-on numbers + one conditional bonus: AI Adoption (the only *direct* AI signal — lower bound), Delivery Health (general eng norms, NOT AI-attributed — never imply causation), Readiness (static). The before/after Enablement delta is the bonus, withheld unless a clean pre-AI baseline exists. Delivery-Health *flags* are blunt (`low test discipline`) on purpose — actionable, not score-padding. **Never read diff or prompt content** — only metadata (dates, sizes, paths, trailers).
 - **The known-AI registry** ([impact.py](shipsignal/impact.py): `AI_TOOL_ALIASES`) is a versioned constant — extend deliberately, like the Readiness `SCORE_CAPS`.
-- **Clone is treeless** (`--filter=blob:none`), never `--depth=1` — freshness *and* impact-history need git history.
+- **Clones are full-history, never `--depth`** (freshness, adoption detection, and the before/after delta need the whole graph). Readiness clones **treeless** (`--filter=blob:none`); Impact/`report` clone **with blobs** (`treeless=False`) because `git log --numstat` triggers a per-commit blob fetch on a treeless clone and crawls on big repos.
 - **Tests are stdlib `unittest`** in `tests/`. Run them before committing.
 
 ## Where to read next

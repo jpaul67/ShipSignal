@@ -24,8 +24,14 @@ def _resolve_url(target: str) -> str:
     return target
 
 
-def _resolve_target(target: str) -> tuple[Path | None, str, Path | None, str | None]:
-    """Return (root, label, tmp_dir_to_cleanup, error). root is None on error."""
+def _resolve_target(
+    target: str, treeless: bool = True
+) -> tuple[Path | None, str, Path | None, str | None]:
+    """Return (root, label, tmp_dir_to_cleanup, error). root is None on error.
+
+    ``treeless`` controls remote clones: Readiness uses a treeless clone; the Impact
+    lens passes ``treeless=False`` so ``git log --numstat`` has local blobs.
+    """
     local = Path(target)
     if local.exists():
         resolved = local.resolve()
@@ -34,8 +40,8 @@ def _resolve_target(target: str) -> tuple[Path | None, str, Path | None, str | N
         url = _resolve_url(target)
         tmp = Path(tempfile.mkdtemp(prefix="bw_"))
         root = tmp / "repo"
-        print(f"  cloning {url} …")
-        ok, err = gitinfo.clone(url, root)
+        print(f"  cloning {'(full) ' if not treeless else ''}{url} …")
+        ok, err = gitinfo.clone(url, root, treeless=treeless)
         if not ok:
             shutil.rmtree(tmp, ignore_errors=True)
             return None, "", None, f"clone failed: {err.strip()[:200]}"
@@ -72,7 +78,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
 
 def _cmd_impact(args: argparse.Namespace) -> int:
-    root, label, tmp, err = _resolve_target(args.target)
+    # Impact needs blobs for `git log --numstat` → full clone for remote targets.
+    root, label, tmp, err = _resolve_target(args.target, treeless=False)
     if err:
         print(f"  {err}", file=sys.stderr)
         return 2
@@ -110,7 +117,8 @@ def _cmd_impact(args: argparse.Namespace) -> int:
 
 def _cmd_report(args: argparse.Namespace) -> int:
     """Unified audit: run both lenses, emit one combined deliverable."""
-    root, label, tmp, err = _resolve_target(args.target)
+    # Report runs the Impact lens too → full clone for remote targets.
+    root, label, tmp, err = _resolve_target(args.target, treeless=False)
     if err:
         print(f"  {err}", file=sys.stderr)
         return 2
