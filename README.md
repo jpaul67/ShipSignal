@@ -1,27 +1,35 @@
 # ShipSignal — the AI impact & delivery-health scanner
 
+[![PyPI](https://img.shields.io/pypi/v/shipsignal.svg)](https://pypi.org/project/shipsignal/) [![Python](https://img.shields.io/pypi/pyversions/shipsignal.svg)](https://pypi.org/project/shipsignal/) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 > **Is AI actually changing how your team ships — and can you prove it without overclaiming?**
 > One read-only, local command points at any repo and tells you three things: how much AI is *actually* being used (measured from commit trailers, not guessed), whether delivery health is sound (graded against general engineering norms, never falsely credited to AI), and whether the repo is set up for agents to succeed — with the specific fixes. The only scanner honest enough to withhold a number it can't back up.
 
 Pure Python stdlib, no runtime deps, runs on any repo in seconds. Read-only and local — nothing leaves your box.
 
-## Quick start
+## Install
 
-Requires Python 3.11+.
+```bash
+uvx shipsignal report <repo>   # zero-install, via uv
+# or
+pip install shipsignal
+```
+
+Requires Python 3.11+. No runtime dependencies.
+
+## Quick start
 
 ```bash
 # Unified audit — all three numbers + fixes, one deliverable (recommended)
-python -m shipsignal.cli report ../crown --html crown-audit.html
+shipsignal report ../crown --html crown-audit.html
 
 # Or run a single lens
-python -m shipsignal.cli impact ../crown          # impact + delivery health
-python -m shipsignal.cli scan ../crown            # readiness only
-python -m shipsignal.cli scan . --fail-under 80   # CI gate
+shipsignal impact ../crown          # impact + delivery health
+shipsignal scan ../crown            # readiness only
+shipsignal scan . --fail-under 80   # CI gate
 ```
 
-See [examples/crown-audit.html](examples/crown-audit.html) for a real audit deliverable.
-
-Once [uv](https://docs.astral.sh/uv/) is installed it also runs as `uvx shipsignal report <target>` (entry point declared in [pyproject.toml](pyproject.toml)).
+See [examples/crown-audit.html](examples/crown-audit.html) for a real audit deliverable. From a source checkout, the same commands run as `python -m shipsignal.cli …`.
 
 ## Impact lens — three always-on numbers
 
