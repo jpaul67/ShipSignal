@@ -1,18 +1,18 @@
 # ShipSignal — AI impact: crown
 
-**2026-02-05 → 2026-06-17 · 19.0 weeks · 726 commits**
+**2026-02-05 → 2026-06-17 · 19.0 weeks · 723 human commits** *(excluded 3 merges + 0 bot commits)*
 
 | | Result | |
 |---|---|---|
-| **AI Adoption** | Pervasive · 97% | Claude 705 |
+| **AI Adoption** | Pervasive · 97% | Claude 704 |
 | **Delivery Health** | 55/100 · F | general eng norms, not AI-attributed |
 | **Readiness** | 83/100 · B | static repo state |
 
 ## AI adoption (direct, in-repo signal)
 
-- **Pervasive — 97.1%** (705/726 commits), a **lower bound** (squash-merges drop trailers).
+- **Pervasive — 97.4%** (704/723 commits), a **lower bound** (squash-merges drop trailers).
 - Adoption date: `2026-02-02` (auto-detected)
-- Per tool: `Claude` (705)
+- Per tool: `Claude` (704)
 
 ## Delivery Health (general engineering norms — NOT AI-attributed)
 
@@ -24,7 +24,28 @@
 | test_discipline | 10% | 35 | low test discipline |
 | knowledge_distribution | n/a (solo author) | 30 |  |
 
-*Context (not scored — too noisy to rank health by): fix/revert 26%, 38.21 commits/wk, 1 contributors.*
+*Context (not scored — too noisy to rank health by): fix/revert 26%, 38.05 commits/wk, 1 contributors.*
+
+## Trajectory — over time *(parallel timelines, NOT a causal link)*
+
+*14 periods, ~10d each.*
+
+| Period | Commits | Adoption | Health |
+|---|---|---|---|
+| 2026-02-05 | 40 | 100% | 31 |
+| 2026-02-15 | 83 | 100% | 55 |
+| 2026-02-25 | 16 | 88% | 55 |
+| 2026-03-07 | 1 | 100% | — |
+| 2026-03-17 | 141 | 99% | 55 |
+| 2026-03-27 | 65 | 100% | 55 |
+| 2026-04-06 | 22 | 100% | 55 |
+| 2026-04-16 | 36 | 100% | 55 |
+| 2026-04-26 | 53 | 100% | 57 |
+| 2026-05-06 | 80 | 100% | 55 |
+| 2026-05-16 | 139 | 89% | 55 |
+| 2026-05-26 | 29 | 100% | 78 |
+| 2026-06-05 | 17 | 100% | 78 |
+| 2026-06-15 | 1 | 100% | — |
 
 ## Before/after AI Enablement (bonus — needs a clean pre-AI baseline)
 
@@ -34,7 +55,7 @@
 
 > Delivery pillars (flow, quality, risk) measure GENERAL delivery health — only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving — it does NOT prove AI caused any change.
 
-<sub>shipsignal v0.1.0 · 2026-06-19T20:49:45Z</sub>
+<sub>shipsignal v0.1.3 · 2026-06-20T21:37:00Z</sub>
 
 ## Readiness — 83/100 · grade B
 

@@ -101,6 +101,8 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             readiness_score=readiness_score,
         )
         print(report.render_impact(result))
+        if args.timeline:
+            print(report.render_trajectory_cli(result))
         for path, payload in (
             (args.json, lambda: json.dumps(result, indent=2, default=str)),
             (args.md, lambda: report.render_impact_markdown(result)),
@@ -132,6 +134,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
             readiness_score=readiness_result.get("score"),
         )
         print(report.render_unified(impact_result, readiness_result))
+        if args.timeline:
+            print(report.render_trajectory_cli(impact_result))
 
         combined = {
             "schema_version": "report-0.1",
@@ -184,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     impact_p.add_argument("--no-readiness", action="store_true",
                           help="skip the readiness scan (the Readiness number shows n/a)")
+    impact_p.add_argument("--timeline", action="store_true",
+                          help="show the over-time trajectory (adoption + delivery health)")
 
     report_p = sub.add_parser("report", help="unified audit: both lenses, one deliverable")
     report_p.add_argument("target", help="local path, https git URL, or owner/repo")
@@ -192,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     report_p.add_argument("--html", metavar="FILE", help="write a unified HTML report to FILE")
     report_p.add_argument("--adoption-date", metavar="YYYY-MM-DD", default=None,
                           help="override the auto-detected adoption date")
+    report_p.add_argument("--timeline", action="store_true",
+                          help="show the over-time trajectory (adoption + delivery health)")
 
     args = parser.parse_args(argv)
     if args.cmd == "scan":

@@ -16,7 +16,7 @@ Pure Python stdlib, no runtime dependencies. Both lenses share architecture and 
   - Reports: `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`
   - Runs both lenses; one combined document; the canonical audit form.
 - Readiness only: `python -m shipsignal.cli scan <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE` · `--badge FILE`; CI gate: `--fail-under N`
-- Impact only: `python -m shipsignal.cli impact <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`; `--no-readiness` to skip the embedded readiness number.
+- Impact only: `python -m shipsignal.cli impact <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`; `--no-readiness` to skip the embedded readiness number; `--timeline` to show the over-time trajectory.
 - Tests: `python -m unittest discover -s tests -v` (or `make test`)
 - Dogfood (the repo passes its own scan): `python -m shipsignal.cli scan . --fail-under 90` (or `make scan`)
 
@@ -24,13 +24,14 @@ Pure Python stdlib, no runtime dependencies. Both lenses share architecture and 
 
 Pipelines:
 - Readiness: `cli` → `scanner` → (`modules` → `detectors` + `setupcheck` → `scoring`) → `report`
-- Impact: `cli` → `impact.compute_impact` → `report.render_impact*`
+- Impact: `cli` → `impact.compute_impact` (→ `timeline.build_trajectory`) → `report.render_impact*`
 
 - [shipsignal/modules.py](shipsignal/modules.py) — module detection + exclusions. **Ecosystem-aware first** (npm/pnpm/Cargo workspaces, anywhere in the tree), directory heuristic only as fallback. This is the part that most affects accuracy.
 - [shipsignal/detectors.py](shipsignal/detectors.py) — doc/agent detectors and their false-positive guards.
 - [shipsignal/setupcheck.py](shipsignal/setupcheck.py) — setup & convention detectors (build/test discoverability, lint/type config, MCP resolution).
 - [shipsignal/scoring.py](shipsignal/scoring.py) — the 0–100 model.
-- [shipsignal/impact.py](shipsignal/impact.py) — Impact lens: `walk_history` (single `git log --numstat` pass, `\x1f`-separated), AI-trailer registry, adoption detection, confidence gate, no-baseline path, pillar scoring.
+- [shipsignal/impact.py](shipsignal/impact.py) — Impact lens: `walk_history` (single `git log --no-merges --numstat` pass, `\x1f`-separated), AI-trailer registry, **bot/merge exclusion** (`is_bot`/`_BOT_RE`), adoption detection, confidence gate, no-baseline path, pillar scoring.
+- [shipsignal/timeline.py](shipsignal/timeline.py) — over-time trajectory: tumbling-window bucketing + per-period adoption % and delivery health; honest gaps for thin/empty periods. Imports from `impact` (one-way; `compute_impact` calls it via a local import to avoid a cycle).
 - [shipsignal/gitinfo.py](shipsignal/gitinfo.py) — git via subprocess.
 
 ## Conventions & gotchas (read before editing)

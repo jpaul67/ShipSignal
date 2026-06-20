@@ -207,6 +207,42 @@ def render_impact(result: dict) -> str:
     return "\n".join(L)
 
 
+def _spark_series(values, max_val: float) -> str:
+    """Sparkline that renders None as a blank (a genuine gap, never zero)."""
+    out = ""
+    for v in values:
+        if v is None:
+            out += " "
+        else:
+            out += _SPARK[min(7, int(v / max_val * 7))] if max_val > 0 else _SPARK[0]
+    return out
+
+
+def render_trajectory_cli(result: dict) -> str:
+    """The over-time section (shown on `--timeline`). Two gap-aware sparkline rows
+    + a period table. The two lines are parallel timelines, NOT a causal claim."""
+    t = result.get("trajectory") or {}
+    if t.get("status") != "ok":
+        return f"\n  Trajectory: n/a — {t.get('reason', 'not enough history')}\n"
+    periods = t["periods"]
+    adoption = [p["adoption_pct"] for p in periods]
+    health = [float(p["health_score"]) if p["health_score"] is not None else None
+              for p in periods]
+    L = ["", "  Trajectory — adoption & delivery health over time",
+         f"  {len(periods)} periods · ~{t['period_days']}d each · "
+         "parallel timelines, NOT a causal link (blank = quiet/thin period)", "",
+         f"   adoption  {_spark_series(adoption, 100)}   0–100%",
+         f"   health    {_spark_series(health, 100)}   0–100",
+         f"   {periods[0]['start']} → {periods[-1]['start']}", "",
+         "   period       commits  adoption  health"]
+    for p in periods:
+        ad = f"{p['adoption_pct']:.0f}%" if p["adoption_pct"] is not None else "—"
+        h = str(p["health_score"]) if p["health_score"] is not None else "—"
+        L.append(f"   {p['start']}  {p['commits']:<7}  {ad:<8}  {h}")
+    L.append("")
+    return "\n".join(L)
+
+
 def render_impact_markdown(result: dict) -> str:
     if result.get("error"):
         return f"# ShipSignal impact — {result['repo']}\n\n**Error:** {result['error']}\n"
@@ -261,6 +297,18 @@ def render_impact_markdown(result: dict) -> str:
         L += ["## Delivery Health", "",
               f"*Insufficient data — {dh['reason']}.*", ""]
 
+    # Over-time trajectory (always included when there's enough history).
+    traj = result.get("trajectory") or {}
+    if traj.get("status") == "ok":
+        L += ["## Trajectory — over time *(parallel timelines, NOT a causal link)*", "",
+              f"*{len(traj['periods'])} periods, ~{traj['period_days']}d each.*", "",
+              "| Period | Commits | Adoption | Health |", "|---|---|---|---|"]
+        for p in traj["periods"]:
+            ad = f"{p['adoption_pct']:.0f}%" if p["adoption_pct"] is not None else "—"
+            h = str(p["health_score"]) if p["health_score"] is not None else "—"
+            L.append(f"| {p['start']} | {p['commits']} | {ad} | {h} |")
+        L.append("")
+
     # Before/after delta — the conditional bonus.
     L += ["## Before/after AI Enablement (bonus — needs a clean pre-AI baseline)", ""]
     if result.get("score_status") == "scored":
@@ -287,6 +335,64 @@ def _stat_card(label: str, value: str, grade: str | None, sub: str) -> str:
             f"<div class='clabel'>{_esc(label)}</div>"
             f"<div class='cval'>{_esc(value)}{grade_chip}</div>"
             f"<div class='csub'>{_esc(sub)}</div></div>")
+
+
+def _svg_trajectory(traj: dict, adoption_date: str | None) -> str:
+    """Inline SVG line chart: adoption % and delivery health over time. Lines break
+    at gaps (None) so quiet/thin periods aren't interpolated. No external deps."""
+    periods = traj["periods"]
+    n = len(periods)
+    W, H, Lm, Rm, Tm, Bm = 680, 250, 44, 16, 24, 40
+    pw, ph = W - Lm - Rm, H - Tm - Bm
+
+    def xc(i: int) -> float:
+        return Lm + (pw * i / (n - 1) if n > 1 else pw / 2)
+
+    def yc(v: float) -> float:
+        return Tm + ph * (1 - v / 100)
+
+    grid = ""
+    for gv in (0, 50, 100):
+        gy = yc(gv)
+        grid += (f"<line x1='{Lm}' y1='{gy:.1f}' x2='{W - Rm}' y2='{gy:.1f}' stroke='#eee'/>"
+                 f"<text x='{Lm - 6}' y='{gy + 3:.1f}' text-anchor='end' font-size='10' "
+                 f"fill='#aaa'>{gv}</text>")
+
+    def series(key: str, color: str) -> str:
+        pts = [None if p[key] is None else (xc(i), yc(float(p[key])))
+               for i, p in enumerate(periods)]
+        out = ""
+        for a, b in zip(pts, pts[1:]):
+            if a and b:  # only connect adjacent present points — gaps break the line
+                out += (f"<line x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' "
+                        f"y2='{b[1]:.1f}' stroke='{color}' stroke-width='2'/>")
+        out += "".join(f"<circle cx='{q[0]:.1f}' cy='{q[1]:.1f}' r='2.5' fill='{color}'/>"
+                       for q in pts if q)
+        return out
+
+    marker = ""
+    if adoption_date:
+        for i, p in enumerate(periods):
+            if p["start"] <= adoption_date <= p["end"]:
+                mx = xc(i)
+                marker = (f"<line x1='{mx:.1f}' y1='{Tm}' x2='{mx:.1f}' y2='{Tm + ph}' "
+                          f"stroke='#b86a2c' stroke-width='1' stroke-dasharray='3 3'/>"
+                          f"<text x='{mx + 3:.1f}' y='{Tm + 10}' font-size='9' "
+                          f"fill='#b86a2c'>AI adoption</text>")
+                break
+
+    xlabels = (f"<text x='{xc(0):.1f}' y='{H - 14}' font-size='10' fill='#aaa'>"
+               f"{_esc(periods[0]['start'])}</text>"
+               f"<text x='{xc(n - 1):.1f}' y='{H - 14}' text-anchor='end' font-size='10' "
+               f"fill='#aaa'>{_esc(periods[-1]['start'])}</text>")
+    legend = (f"<circle cx='{Lm + 6}' cy='{H - 26}' r='3' fill='#4477dd'/>"
+              f"<text x='{Lm + 14}' y='{H - 23}' font-size='10' fill='#555'>adoption %</text>"
+              f"<circle cx='{Lm + 104}' cy='{H - 26}' r='3' fill='#4c1'/>"
+              f"<text x='{Lm + 112}' y='{H - 23}' font-size='10' fill='#555'>delivery health</text>")
+    return (f"<svg viewBox='0 0 {W} {H}' width='100%' style='max-width:680px' "
+            f"xmlns='http://www.w3.org/2000/svg' font-family='sans-serif'>{grid}{marker}"
+            f"{series('adoption_pct', '#4477dd')}{series('health_score', '#4c1')}"
+            f"{xlabels}{legend}</svg>")
 
 
 def render_impact_html(result: dict) -> str:
@@ -367,6 +473,14 @@ def render_impact_html(result: dict) -> str:
                        f"<span class='hint'>A before/after needs a clean pre-AI baseline; the "
                        f"three numbers above stand on their own.</span></div>")
 
+    traj = result.get("trajectory") or {}
+    if traj.get("status") == "ok":
+        chart = _svg_trajectory(traj, ad.get("adoption_date"))
+        traj_block = (f"<h2>Trajectory <span class='hint'>over time — parallel timelines, "
+                      f"NOT a causal link</span></h2>{chart}")
+    else:
+        traj_block = ""
+
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>
 body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
@@ -407,6 +521,8 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 {health_block}
 
 {bonus_block}
+
+{traj_block}
 
 <div class="caveat"><b>Attribution caveat.</b> {_esc(result['attribution_caveat'])}</div>
 <p><sub>shipsignal v{__version__} · {_esc(result['scanned_at'])}</sub></p>

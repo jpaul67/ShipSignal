@@ -423,10 +423,12 @@ def _knowledge_subscore(people: dict) -> float:
     return conc
 
 
-def delivery_health(commits: list[Commit], metrics: dict) -> dict:
-    if len(commits) < MIN_COMMITS_FOR_HEALTH:
+def delivery_health(commits: list[Commit], metrics: dict,
+                    min_commits: int = MIN_COMMITS_FOR_HEALTH) -> dict:
+    # min_commits is looser for per-period trajectory buckets (trend > any one point).
+    if len(commits) < min_commits:
         return {"status": "insufficient", "score": None, "grade": None,
-                "reason": f"only {len(commits)} commits (need {MIN_COMMITS_FOR_HEALTH} "
+                "reason": f"only {len(commits)} commits (need {min_commits} "
                           "for a delivery-health snapshot)",
                 "components": [], "descriptive": {}}
 
@@ -692,6 +694,11 @@ def compute_impact(
         {"score": readiness_score, "grade": grade_for(readiness_score)}
         if readiness_score is not None else None
     )
+
+    # --- Over-time trajectory (adoption + delivery health per period) ---
+    # Local import avoids a module-load cycle (timeline imports impact).
+    from .timeline import build_trajectory
+    result["trajectory"] = build_trajectory(commits)
 
     # --- Confidence + no-baseline detection ---
     conf = assess_confidence(commits)
