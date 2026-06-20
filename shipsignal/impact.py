@@ -58,6 +58,15 @@ _TEST_PATH_RE = re.compile(
     r"(?:^|/)[^/]+[._-](?:test|spec)\.[a-z0-9]+$",
     re.IGNORECASE,
 )
+# Bot authors — excluded so cadence, change-shape, contributors, and the adoption
+# denominator reflect HUMAN work (renovate alone is vitest's single biggest
+# "contributor"; counting it distorts every people/flow metric). Matches the
+# canonical `[bot]` marker in GitHub noreply emails plus common named bots.
+_BOT_RE = re.compile(
+    r"\[bot\]|(?:^|[^a-z])(?:dependabot|renovate|greenkeeper|snyk-bot|github-actions|"
+    r"mergify|allcontributors|semantic-release-bot|imgbot|pyup-bot|codecov)(?:[^a-z]|$)",
+    re.IGNORECASE,
+)
 _CODE_EXTS = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
     ".rs", ".go", ".java", ".kt", ".swift",
@@ -129,6 +138,10 @@ class Commit:
         return out
 
     @property
+    def is_bot(self) -> bool:
+        return bool(_BOT_RE.search(self.email))
+
+    @property
     def is_fix(self) -> bool:
         return bool(_FIX_RE.match(self.subject))
 
@@ -161,7 +174,12 @@ def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
     linux-sized). The readiness lens keeps the lower default — a single git log
     --numstat pass on a 6000-commit treeless clone is the slowest thing we do.
     """
-    out = gitinfo._run(["git", "log", "--numstat", f"--format={_FMT}"], root, timeout=timeout)
+    # --no-merges: merge commits carry no diff under --numstat, so they'd add
+    # zero-line entries that dilute change-shape and inflate the commit count
+    # (express is ~8% merges). Analyze actual change commits only.
+    out = gitinfo._run(
+        ["git", "log", "--no-merges", "--numstat", f"--format={_FMT}"], root, timeout=timeout
+    )
     if not out:
         return []
     commits: list[Commit] = []
@@ -591,8 +609,8 @@ def compute_impact(
         result["error"] = "not a git repository"
         return result
 
-    commits = walk_history(root)  # newest-first
-    if not commits:
+    all_commits = walk_history(root)  # newest-first, merges already excluded
+    if not all_commits:
         # Distinguish a truly empty repo from a failed/timed-out git log
         # (the latter happens on huge treeless clones where --numstat is slow).
         rev_count_raw = gitinfo._run(["git", "rev-list", "--count", "HEAD"], root)
@@ -610,6 +628,26 @@ def compute_impact(
         else:
             result["error"] = "no commit history"
         return result
+
+    # Analyze HUMAN, non-merge commits only. Bots (renovate/dependabot/CI) aren't
+    # team delivery and distort cadence, change-shape, contributors, and the
+    # adoption denominator. Merges were already dropped in walk_history.
+    bots = [c for c in all_commits if c.is_bot]
+    commits = [c for c in all_commits if not c.is_bot]
+    if not commits:
+        result["error"] = "no human commits to analyze (all commits are bots/merges)"
+        return result
+
+    total_with_merges_raw = gitinfo._run(["git", "rev-list", "--count", "HEAD"], root)
+    try:
+        total_with_merges = int(total_with_merges_raw.strip()) if total_with_merges_raw else 0
+    except ValueError:
+        total_with_merges = 0
+    result["analysis"] = {
+        "commits_analyzed": len(commits),
+        "merges_excluded": max(0, total_with_merges - len(all_commits)),
+        "bot_commits_excluded": len(bots),
+    }
 
     result["commit_sha"] = gitinfo.head_sha(root)
     first_date = min(c.date for c in commits)

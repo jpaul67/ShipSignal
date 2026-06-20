@@ -55,6 +55,26 @@ class TestTrailerDetection(unittest.TestCase):
         self.assertEqual(c.ai_tools, {"Claude", "Cursor"})
 
 
+class TestBotDetection(unittest.TestCase):
+    def test_github_bot_emails(self):
+        for email in [
+            "49699333+dependabot[bot]@users.noreply.github.com",
+            "29139614+renovate[bot]@users.noreply.github.com",
+            "github-actions[bot]@users.noreply.github.com",
+            "snyk-bot@snyk.io",
+        ]:
+            self.assertTrue(_c(email=email).is_bot, email)
+
+    def test_humans_not_flagged(self):
+        for email in [
+            "jane@example.com",
+            "bob.roberts@corp.io",          # contains 'bob' not a bot word
+            "abbott@example.com",           # 'abbott' must not match 'bot'
+            "robotics-team@example.com",    # 'robot' must not match '[bot]'
+        ]:
+            self.assertFalse(_c(email=email).is_bot, email)
+
+
 class TestSubjectAndPaths(unittest.TestCase):
     def test_fix_subjects(self):
         for s in ["fix: bad behavior", "Fix login bug", "fix(scope): x", "revert: foo",

@@ -137,7 +137,11 @@ def render_impact(result: dict) -> str:
     dh = result["delivery_health"]
     rd = result.get("readiness")
     L.append(f"  {w['first_commit']} → {w['last_commit']}  "
-             f"({w['weeks']} weeks, {ad['total_commits']} commits)")
+             f"({w['weeks']} weeks, {ad['total_commits']} human commits)")
+    an = result.get("analysis") or {}
+    if an.get("merges_excluded") or an.get("bot_commits_excluded"):
+        L.append(f"  excluded {an['merges_excluded']} merges + "
+                 f"{an['bot_commits_excluded']} bot commits")
     L.append("")
 
     # --- The three always-on headline numbers ---
@@ -218,9 +222,14 @@ def render_impact_markdown(result: dict) -> str:
     ready_cell = f"{rd['score']}/100 · {rd['grade']}" if rd else "—"
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())) if ad.get("per_tool") else "—"
 
+    an = result.get("analysis") or {}
+    excl = ""
+    if an.get("merges_excluded") or an.get("bot_commits_excluded"):
+        excl = (f" *(excluded {an['merges_excluded']} merges + "
+                f"{an['bot_commits_excluded']} bot commits)*")
     L = [f"# ShipSignal — AI impact: {result['repo']}", "",
          f"**{w['first_commit']} → {w['last_commit']} · {w['weeks']} weeks · "
-         f"{ad['total_commits']} commits**", "",
+         f"{ad['total_commits']} human commits**{excl}", "",
          "| | Result | |", "|---|---|---|",
          f"| **AI Adoption** | {ad['level']} · {ad['ai_coauthor_share'] * 100:.0f}% | {tools} |",
          f"| **Delivery Health** | {health_cell} | general eng norms, not AI-attributed |",
@@ -292,6 +301,11 @@ def render_impact_html(result: dict) -> str:
     pct = ad["ai_coauthor_share"] * 100
     series_rates = [s[1] for s in ad.get("weekly_series", [])]
     spark = _esc(_sparkline(series_rates, max_val=1.0)) if series_rates else ""
+    an = result.get("analysis") or {}
+    excl_html = ""
+    if an.get("merges_excluded") or an.get("bot_commits_excluded"):
+        excl_html = (f" · <span class='hint'>excluded {an['merges_excluded']} merges + "
+                     f"{an['bot_commits_excluded']} bot</span>")
 
     # --- three headline cards ---
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
@@ -379,7 +393,7 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 </style></head><body>
 <h1>ShipSignal — AI impact</h1>
-<div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} · {w['weeks']} weeks · {ad['total_commits']} commits</div>
+<div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} · {w['weeks']} weeks · {ad['total_commits']} human commits{excl_html}</div>
 
 <div class="cards">{cards}</div>
 
