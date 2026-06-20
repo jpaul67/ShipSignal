@@ -56,23 +56,41 @@ class TestTrailerDetection(unittest.TestCase):
 
 
 class TestBotDetection(unittest.TestCase):
-    def test_github_bot_emails(self):
+    def test_maintenance_bots(self):
         for email in [
             "49699333+dependabot[bot]@users.noreply.github.com",
             "29139614+renovate[bot]@users.noreply.github.com",
             "github-actions[bot]@users.noreply.github.com",
             "snyk-bot@snyk.io",
         ]:
-            self.assertTrue(_c(email=email).is_bot, email)
+            c = _c(email=email)
+            self.assertTrue(c.is_maintenance_bot, email)
+            self.assertFalse(c.is_ai_agent, email)
+            self.assertFalse(c.ai_authored, email)   # maintenance bots are NOT AI dev
+
+    def test_ai_agent_bots_count_as_ai(self):
+        for email, label in [
+            ("159125892+gpt-engineer-app[bot]@users.noreply.github.com", "GPT-Engineer"),
+            ("devin-ai-integration[bot]@users.noreply.github.com", "Devin"),
+            ("copilot-swe-agent[bot]@users.noreply.github.com", "Copilot"),
+        ]:
+            c = _c(email=email)
+            self.assertTrue(c.is_ai_agent, email)
+            self.assertFalse(c.is_maintenance_bot, email)
+            self.assertTrue(c.ai_authored, email)     # agent commits ARE AI dev
+            self.assertEqual(c.ai_agent_label, label)
+            self.assertIn(label, c.ai_tools)
 
     def test_humans_not_flagged(self):
         for email in [
             "jane@example.com",
-            "bob.roberts@corp.io",          # contains 'bob' not a bot word
-            "abbott@example.com",           # 'abbott' must not match 'bot'
-            "robotics-team@example.com",    # 'robot' must not match '[bot]'
+            "abbott@example.com",            # 'abbott' must not match 'bot'
+            "robotics-team@example.com",     # 'robot' must not match '[bot]'
+            "claude.dupont@company.com",     # human named Claude, no [bot] -> not an agent
         ]:
-            self.assertFalse(_c(email=email).is_bot, email)
+            c = _c(email=email)
+            self.assertFalse(c.is_maintenance_bot, email)
+            self.assertFalse(c.is_ai_agent, email)
 
 
 class TestSubjectAndPaths(unittest.TestCase):

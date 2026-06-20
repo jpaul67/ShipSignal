@@ -58,15 +58,40 @@ _TEST_PATH_RE = re.compile(
     r"(?:^|/)[^/]+[._-](?:test|spec)\.[a-z0-9]+$",
     re.IGNORECASE,
 )
-# Bot authors — excluded so cadence, change-shape, contributors, and the adoption
-# denominator reflect HUMAN work (renovate alone is vitest's single biggest
-# "contributor"; counting it distorts every people/flow metric). Matches the
-# canonical `[bot]` marker in GitHub noreply emails plus common named bots.
-_BOT_RE = re.compile(
-    r"\[bot\]|(?:^|[^a-z])(?:dependabot|renovate|greenkeeper|snyk-bot|github-actions|"
-    r"mergify|allcontributors|semantic-release-bot|imgbot|pyup-bot|codecov)(?:[^a-z]|$)",
-    re.IGNORECASE,
+# Two kinds of bot, treated very differently:
+#   * MAINTENANCE bots (renovate/dependabot/CI) — automation noise. Excluded
+#     entirely so cadence, change-shape, contributors aren't distorted (renovate
+#     alone is vitest's single biggest "contributor").
+#   * AI-AGENT bots (gpt-engineer/devin/copilot-agent/…) — these ARE AI doing
+#     development, so they COUNT toward AI adoption and stay in the analysis;
+#     excluding them would undercount AI's real footprint (juglr's 92
+#     gpt-engineer commits would vanish).
+_MAINTENANCE_BOTS = (
+    "dependabot", "renovate", "greenkeeper", "snyk-bot", "github-actions",
+    "mergify", "allcontributors", "semantic-release", "imgbot", "pyup-bot",
+    "codecov", "netlify", "vercel", "pre-commit-ci",
 )
+# name token -> display label, for AI coding-agent bot accounts
+_AI_AGENT_BOTS = {
+    "gpt-engineer": "GPT-Engineer", "devin": "Devin", "sweep": "Sweep",
+    "aider": "Aider", "claude": "Claude", "copilot": "Copilot",
+    "cursor": "Cursor", "codex": "Codex", "codegen": "Codegen",
+}
+
+
+def _bot_kind(email: str) -> tuple[str, str | None] | None:
+    """Classify an author email: None (human), ('ai_agent', label), or
+    ('maintenance', None). AI-agent classification requires a bot ACCOUNT (a
+    `[bot]` marker or known automation name) so a human like 'claude.smith@…'
+    is never misread as an agent."""
+    low = email.lower()
+    is_bot_account = "[bot]" in low or any(m in low for m in _MAINTENANCE_BOTS)
+    if not is_bot_account:
+        return None
+    for kw, label in _AI_AGENT_BOTS.items():
+        if kw in low:
+            return ("ai_agent", label)
+    return ("maintenance", None)
 _CODE_EXTS = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
     ".rs", ".go", ".java", ".kt", ".swift",
@@ -116,7 +141,26 @@ class Commit:
         return self.lines_added + self.lines_deleted
 
     @property
+    def is_maintenance_bot(self) -> bool:
+        k = _bot_kind(self.email)
+        return k is not None and k[0] == "maintenance"
+
+    @property
+    def is_ai_agent(self) -> bool:
+        k = _bot_kind(self.email)
+        return k is not None and k[0] == "ai_agent"
+
+    @property
+    def ai_agent_label(self) -> str | None:
+        k = _bot_kind(self.email)
+        return k[1] if (k is not None and k[0] == "ai_agent") else None
+
+    @property
     def ai_authored(self) -> bool:
+        # An AI agent's own commit is AI-authored; so is a human commit carrying
+        # an AI Co-Authored-By trailer.
+        if self.is_ai_agent:
+            return True
         for t in self.trailers:
             low = t.lower()
             if not low.startswith("co-authored-by:"):
@@ -128,6 +172,8 @@ class Commit:
     @property
     def ai_tools(self) -> set[str]:
         out: set[str] = set()
+        if self.ai_agent_label:
+            out.add(self.ai_agent_label)
         for t in self.trailers:
             low = t.lower()
             if not low.startswith("co-authored-by:"):
@@ -136,10 +182,6 @@ class Commit:
                 if kw in low:
                     out.add(label)
         return out
-
-    @property
-    def is_bot(self) -> bool:
-        return bool(_BOT_RE.search(self.email))
 
     @property
     def is_fix(self) -> bool:
@@ -631,14 +673,16 @@ def compute_impact(
             result["error"] = "no commit history"
         return result
 
-    # Analyze HUMAN, non-merge commits only. Bots (renovate/dependabot/CI) aren't
-    # team delivery and distort cadence, change-shape, contributors, and the
-    # adoption denominator. Merges were already dropped in walk_history.
-    bots = [c for c in all_commits if c.is_bot]
-    commits = [c for c in all_commits if not c.is_bot]
+    # Analyze the DEVELOPMENT stream = human + AI-agent commits. Maintenance bots
+    # (renovate/dependabot/CI) are automation noise and dropped entirely. AI-agent
+    # commits (gpt-engineer/devin/…) are AI doing real work, so they stay and count
+    # toward adoption. Merges were already dropped in walk_history.
+    maint = [c for c in all_commits if c.is_maintenance_bot]
+    commits = [c for c in all_commits if not c.is_maintenance_bot]
     if not commits:
-        result["error"] = "no human commits to analyze (all commits are bots/merges)"
+        result["error"] = "no development commits to analyze (all merges / maintenance bots)"
         return result
+    agents = [c for c in commits if c.is_ai_agent]
 
     total_with_merges_raw = gitinfo._run(["git", "rev-list", "--count", "HEAD"], root)
     try:
@@ -648,7 +692,8 @@ def compute_impact(
     result["analysis"] = {
         "commits_analyzed": len(commits),
         "merges_excluded": max(0, total_with_merges - len(all_commits)),
-        "bot_commits_excluded": len(bots),
+        "maintenance_bots_excluded": len(maint),
+        "ai_agent_commits": len(agents),  # counted as AI, not excluded
     }
 
     result["commit_sha"] = gitinfo.head_sha(root)

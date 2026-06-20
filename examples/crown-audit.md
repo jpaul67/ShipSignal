@@ -1,6 +1,6 @@
 # ShipSignal — AI impact: crown
 
-**2026-02-05 → 2026-06-17 · 19.0 weeks · 723 human commits** *(excluded 3 merges + 0 bot commits)*
+**2026-02-05 → 2026-06-17 · 19.0 weeks · 723 dev commits** *(excluded 3 merges + 0 maintenance-bot commits)*
 
 | | Result | |
 |---|---|---|
@@ -63,7 +63,7 @@
 
 > Delivery pillars (flow, quality, risk) measure GENERAL delivery health — only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving — it does NOT prove AI caused any change.
 
-<sub>shipsignal v0.1.4 · 2026-06-20T22:04:13Z</sub>
+<sub>shipsignal v0.1.6 · 2026-06-20T22:19:22Z</sub>
 
 ## Readiness — 83/100 · grade B
 

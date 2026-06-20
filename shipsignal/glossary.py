@@ -16,10 +16,12 @@ GLOSSARY: dict[str, dict[str, str]] = {
     "ai_adoption": {
         "short": "The share of commits an AI tool co-authored — the one directly "
                  "measured sign AI is actually being used here, not a survey.",
-        "tip": "Counts commits whose Co-Authored-By: trailers name a known AI tool "
-               "(Claude, Copilot, Cursor, …), over human (non-bot, non-merge) commits. "
-               "A lower bound — squash-merges drop the trailer. Banded None / Emerging "
-               "(<10%) / Established (<50%) / Pervasive (≥50%).",
+        "tip": "Counts AI-driven development commits — human commits carrying an AI "
+               "Co-Authored-By: trailer (Claude, Copilot, …) PLUS commits authored by an "
+               "AI coding-agent bot (gpt-engineer, devin, …) — over all development "
+               "commits (maintenance bots like renovate/dependabot excluded). A lower "
+               "bound: squash-merges drop trailers. Banded None / Emerging (<10%) / "
+               "Established (<50%) / Pervasive (≥50%).",
     },
     "delivery_health": {
         "short": "How sound the team's shipping habits are by general engineering "
