@@ -8,6 +8,14 @@
 | **Delivery Health** | 55/100 · F | general eng norms, not AI-attributed |
 | **Readiness** | 83/100 · B | static repo state |
 
+## How to read this
+
+- **AI Adoption** — The share of commits an AI tool co-authored — the one directly measured sign AI is actually being used here, not a survey.
+- **Delivery Health** — How sound the team's shipping habits are by general engineering norms — deliberately NOT credited to AI. High adoption means little if delivery health is poor.
+- **Readiness** — Whether the repo is set up so an AI agent (or a new human) can navigate it and trust what it reads — the conditions that decide whether AI adoption actually pays off.
+- **Before/after AI Enablement** — When a clean pre-AI baseline exists, how delivery metrics shifted after adoption — shown as context, never proof AI caused the change.
+- **Trajectory** — How AI adoption and delivery health moved over the repo's history — two parallel timelines, correlation only, never proof one caused the other.
+
 ## AI adoption (direct, in-repo signal)
 
 - **Pervasive — 97.4%** (704/723 commits), a **lower bound** (squash-merges drop trailers).
@@ -55,7 +63,7 @@
 
 > Delivery pillars (flow, quality, risk) measure GENERAL delivery health — only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving — it does NOT prove AI caused any change.
 
-<sub>shipsignal v0.1.3 · 2026-06-20T21:37:00Z</sub>
+<sub>shipsignal v0.1.4 · 2026-06-20T22:04:13Z</sub>
 
 ## Readiness — 83/100 · grade B
 

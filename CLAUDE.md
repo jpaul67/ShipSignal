@@ -32,6 +32,7 @@ Pipelines:
 - [shipsignal/scoring.py](shipsignal/scoring.py) — the 0–100 model.
 - [shipsignal/impact.py](shipsignal/impact.py) — Impact lens: `walk_history` (single `git log --no-merges --numstat` pass, `\x1f`-separated), AI-trailer registry, **bot/merge exclusion** (`is_bot`/`_BOT_RE`), adoption detection, confidence gate, no-baseline path, pillar scoring.
 - [shipsignal/timeline.py](shipsignal/timeline.py) — over-time trajectory: tumbling-window bucketing + per-period adoption % and delivery health; honest gaps for thin/empty periods. Imports from `impact` (one-way; `compute_impact` calls it via a local import to avoid a cycle).
+- [shipsignal/glossary.py](shipsignal/glossary.py) — explanatory copy (single source of truth for inline section lines, HTML hover tooltips, and the "How to read this" block; keep the three in sync by editing here only).
 - [shipsignal/gitinfo.py](shipsignal/gitinfo.py) — git via subprocess.
 
 ## Conventions & gotchas (read before editing)

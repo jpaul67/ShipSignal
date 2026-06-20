@@ -3,11 +3,28 @@ from __future__ import annotations
 
 from html import escape as _esc
 
-from . import __version__
+from . import __version__, glossary
 
 GRADE_COLOR = {"A": "#4c1", "B": "#97ca00", "C": "#dfb317", "D": "#fe7d37", "F": "#e05d44"}
 
 _SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _tip(label: str, key: str) -> str:
+    """An HTML term carrying a hover tooltip (native title=, zero-dependency).
+    A dotted underline (.tip) cues that an explanation is available."""
+    t = glossary.tip(key)
+    return f"<span class='tip' title='{_esc(t)}'>{_esc(label)}</span>" if t else _esc(label)
+
+
+def _how_to_read_html() -> str:
+    """A collapsible glossary so the report is self-teaching without hovering."""
+    items = "".join(
+        f"<dt>{_esc(name)}</dt><dd>{_esc(glossary.short(key))}</dd>"
+        for name, key in glossary.HOWTO_ORDER
+    )
+    return ("<details class='howto'><summary>How to read this report</summary>"
+            f"<dl>{items}</dl></details>")
 
 
 def _bar(points, maximum, width: int = 16) -> str:
@@ -161,6 +178,7 @@ def render_impact(result: dict) -> str:
 
     # --- AI adoption detail ---
     L.append(f"  AI adoption ({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)")
+    L.append(f"   {glossary.short('ai_adoption')}")
     if ad.get("adoption_date"):
         L.append(f"   adoption date {ad['adoption_date']} "
                  f"({'auto' if ad['adoption_auto_detected'] else 'override'})")
@@ -174,6 +192,7 @@ def render_impact(result: dict) -> str:
     # --- Delivery Health breakdown ---
     if dh["status"] == "scored":
         L.append("  Delivery Health — general engineering norms, NOT AI-attributed:")
+        L.append(f"   {glossary.short('delivery_health')}")
         for c in dh["components"]:
             if c["score_frac"] is None:
                 L.append(f"   {c['id']:<24} {'·' * 12} {c['status']}")
@@ -271,6 +290,10 @@ def render_impact_markdown(result: dict) -> str:
          f"| **Delivery Health** | {health_cell} | general eng norms, not AI-attributed |",
          f"| **Readiness** | {ready_cell} | static repo state |", ""]
 
+    L += ["## How to read this", ""]
+    L += [f"- **{name}** — {glossary.short(key)}" for name, key in glossary.HOWTO_ORDER]
+    L.append("")
+
     L += ["## AI adoption (direct, in-repo signal)", "",
           f"- **{ad['level']} — {ad['ai_coauthor_share'] * 100:.1f}%** "
           f"({ad['ai_commits']}/{ad['total_commits']} commits), a **lower bound** "
@@ -327,12 +350,13 @@ def render_impact_markdown(result: dict) -> str:
     return "\n".join(L)
 
 
-def _stat_card(label: str, value: str, grade: str | None, sub: str) -> str:
+def _stat_card(label: str, value: str, grade: str | None, sub: str, key: str = "") -> str:
     color = GRADE_COLOR.get(grade, "#4477dd") if grade else "#4477dd"
     grade_chip = (f"<span class='gchip' style='background:{color}'>{_esc(grade)}</span>"
                   if grade else "")
+    clabel = _tip(label, key) if key else _esc(label)
     return (f"<div class='card' style='border-top:3px solid {color}'>"
-            f"<div class='clabel'>{_esc(label)}</div>"
+            f"<div class='clabel'>{clabel}</div>"
             f"<div class='cval'>{_esc(value)}{grade_chip}</div>"
             f"<div class='csub'>{_esc(sub)}</div></div>")
 
@@ -417,18 +441,19 @@ def render_impact_html(result: dict) -> str:
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
              if ad.get("per_tool") else "no AI trailers")
     cards = (f"<div class='card' style='border-top:3px solid #4477dd'>"
-             f"<div class='clabel'>AI Adoption</div>"
+             f"<div class='clabel'>{_tip('AI Adoption', 'ai_adoption')}</div>"
              f"<div class='cval'>{ad['level']}<span class='pct'>{pct:.0f}%</span></div>"
              f"<div class='csub'>{_esc(tools)} · lower bound</div></div>")
     if dh["status"] == "scored":
         cards += _stat_card("Delivery Health", f"{dh['score']}/100 ", dh["grade"],
-                            "general eng norms")
+                            "general eng norms", key="delivery_health")
     else:
-        cards += _stat_card("Delivery Health", "—", None, dh["reason"])
+        cards += _stat_card("Delivery Health", "—", None, dh["reason"], key="delivery_health")
     if rd:
-        cards += _stat_card("Readiness", f"{rd['score']}/100 ", rd["grade"], "static repo state")
+        cards += _stat_card("Readiness", f"{rd['score']}/100 ", rd["grade"],
+                            "static repo state", key="readiness")
     else:
-        cards += _stat_card("Readiness", "—", None, "not run")
+        cards += _stat_card("Readiness", "—", None, "not run", key="readiness")
 
     # --- delivery-health breakdown ---
     if dh["status"] == "scored":
@@ -436,21 +461,22 @@ def render_impact_html(result: dict) -> str:
         for c in dh["components"]:
             flag = (f"<span class='flag'>{_esc(c['flag'])}</span>" if c.get("flag") else "")
             if c["score_frac"] is None:
-                rows += (f"<div class='row'><div class='cat'>{_esc(c['id'])}</div>"
+                rows += (f"<div class='row'><div class='cat'>{_tip(c['id'], c['id'])}</div>"
                          f"<div class='bar na'></div>"
                          f"<div class='num'>{_esc(c['status'])}</div></div>")
             else:
-                rows += (f"<div class='row'><div class='cat'>{_esc(c['id'])}</div>"
+                rows += (f"<div class='row'><div class='cat'>{_tip(c['id'], c['id'])}</div>"
                          f"<div class='bar'><span style='width:{c['score_frac'] * 100:.0f}%'></span></div>"
                          f"<div class='num'>{c['score_frac'] * 100:.0f}% {flag}</div></div>")
         d = dh["descriptive"]
         ctx = (f"<p class='hint'>Context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
                f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors.</p>")
-        health_block = (f"<h2>Delivery Health <span class='hint'>(general norms, "
-                        f"NOT AI-attributed)</span></h2>{rows}{ctx}")
+        health_block = (f"<h2>{_tip('Delivery Health', 'delivery_health')}</h2>"
+                        f"<p class='hint'>{_esc(glossary.short('delivery_health'))}</p>"
+                        f"{rows}{ctx}")
     else:
-        health_block = (f"<h2>Delivery Health</h2><div class='withheld'>Insufficient data — "
-                        f"{_esc(dh['reason'])}.</div>")
+        health_block = (f"<h2>{_tip('Delivery Health', 'delivery_health')}</h2>"
+                        f"<div class='withheld'>Insufficient data — {_esc(dh['reason'])}.</div>")
 
     # --- before/after bonus ---
     if result.get("score_status") == "scored":
@@ -463,11 +489,13 @@ def render_impact_html(result: dict) -> str:
             f"<div class='bar na'></div><div class='num'>{_esc(pl.get('status', 'n/a'))}</div></div>"
             for pl in result.get("pillars", [])
         )
-        bonus_block = (f"<h2>Before/after AI Enablement</h2>"
+        bonus_block = (f"<h2>{_tip('Before/after AI Enablement', 'before_after')}</h2>"
+                       f"<p class='hint'>{_esc(glossary.short('before_after'))}</p>"
                        f"<p><span class='score'>{result['score']}</span>"
                        f"<span class='slash'>/100</span></p>{prows}")
     else:
-        bonus_block = (f"<h2>Before/after AI Enablement <span class='hint'>(bonus)</span></h2>"
+        bonus_block = (f"<h2>{_tip('Before/after AI Enablement', 'before_after')} "
+                       f"<span class='hint'>(bonus)</span></h2>"
                        f"<div class='withheld'>n/a — "
                        f"{_esc(result.get('score_withheld_reason', 'see confidence'))}<br>"
                        f"<span class='hint'>A before/after needs a clean pre-AI baseline; the "
@@ -476,8 +504,8 @@ def render_impact_html(result: dict) -> str:
     traj = result.get("trajectory") or {}
     if traj.get("status") == "ok":
         chart = _svg_trajectory(traj, ad.get("adoption_date"))
-        traj_block = (f"<h2>Trajectory <span class='hint'>over time — parallel timelines, "
-                      f"NOT a causal link</span></h2>{chart}")
+        traj_block = (f"<h2>{_tip('Trajectory', 'trajectory')} <span class='hint'>over time "
+                      f"— parallel timelines, NOT a causal link</span></h2>{chart}")
     else:
         traj_block = ""
 
@@ -503,6 +531,10 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
 .withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
 .hint{{color:#666;font-size:13px;font-weight:400}}
+.tip{{border-bottom:1px dotted #bbb;cursor:help}}
+.howto{{margin:4px 0 20px;font-size:13px;background:#fafafa;border-radius:8px;padding:8px 14px}}
+.howto summary{{cursor:pointer;color:#4477dd;font-weight:600}}
+.howto dt{{font-weight:600;margin-top:8px}}.howto dd{{margin:2px 0 0;color:#555}}
 .caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 </style></head><body>
@@ -511,11 +543,14 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 
 <div class="cards">{cards}</div>
 
+{_how_to_read_html()}
+
 <div class="headline">
   <b>AI adoption {pct:.1f}%</b>
   <span class="hint">({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)</span><br>
   {("Adoption date: <code>" + _esc(ad['adoption_date']) + "</code>") if ad.get('adoption_date') else "<span class='hint'>No sustained adoption window detected.</span>"}
   {("<br>Rate / week: <span class='spark'>" + spark + "</span>") if spark else ""}
+  <div class="hint" style="margin-top:6px">{_esc(glossary.short('ai_adoption'))}</div>
 </div>
 
 {health_block}
@@ -602,10 +637,10 @@ def render_unified_html(impact_result: dict, readiness_result: dict) -> str:
     cat_rows = ""
     for cid, val, pct in _cat_rows(readiness_result):
         if pct is None:
-            cat_rows += (f"<div class='row'><div class='cat'>{_esc(cid)}</div>"
+            cat_rows += (f"<div class='row'><div class='cat'>{_tip(cid, cid)}</div>"
                          f"<div class='bar na'></div><div class='num'>{_esc(val)}</div></div>")
         else:
-            cat_rows += (f"<div class='row'><div class='cat'>{_esc(cid)}</div>"
+            cat_rows += (f"<div class='row'><div class='cat'>{_tip(cid, cid)}</div>"
                          f"<div class='bar'><span style='width:{pct:.0f}%'></span></div>"
                          f"<div class='num'>{_esc(val)}</div></div>")
     warns, extra = _readiness_fix_lines(readiness_result)

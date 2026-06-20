@@ -15,4 +15,5 @@ Pipelines:
 - `scoring.py` — the 0–100 readiness model with n/a + indeterminate handling and grade bands.
 - `impact.py` — Impact lens: single `git log --no-merges --numstat` pass; bot/merge exclusion; AI-co-author registry; adoption auto-detection; confidence gate; no-baseline path; pillar scoring + attribution caveat.
 - `timeline.py` — over-time trajectory: per-period adoption % + delivery health (tumbling windows, honest gaps).
+- `glossary.py` — explanatory copy (single source for inline lines, HTML tooltips, the "How to read this" block).
 - `report.py` — CLI text + Markdown/HTML reports (incl. SVG trajectory chart) + badge SVG; separate render functions for readiness vs impact.
