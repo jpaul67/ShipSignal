@@ -116,9 +116,15 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "false-positive guards (skips http/anchors/doc-site routes). 13 pts.",
     },
     "doc_freshness": {
-        "short": "Docs haven't drifted behind the code they describe.",
-        "tip": "Proportional to the share of module docs not stale vs their code's last "
-               "change (gentle for agent files). Needs git history. 12 pts.",
+        "short": "Docs haven't drifted behind the code they describe, and aren't "
+                 "obviously desynced (dead references, predates new modules, "
+                 "never-revised across hundreds of commits).",
+        "tip": "Per-doc graded drift: full credit when fresh, less as the lag past "
+               "the staleness threshold (180d strict / 365d gentle for agent files) "
+               "grows — 0–3mo past = 85%, 3–6mo = 50%, 6–12mo = 20%, 12mo+ = 0%. "
+               "Also surfaces (as fixes, not score) referenced-but-missing paths, "
+               "agent files that predate later modules, and docs untouched across "
+               "≥100 commits. Never flags age alone. Needs git history. 12 pts.",
     },
 }
 

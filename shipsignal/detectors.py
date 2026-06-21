@@ -140,11 +140,80 @@ def _pdate(s: str) -> date | None:
         return None
 
 
-def _drifted(doc_date: str, code_date: str, gentle: bool) -> bool:
+def _drift_grade(doc_date: str, code_date: str, gentle: bool) -> float:
+    """B4: graded drift in [0, 1] — 1.0 = fresh, 0.0 = very stale.
+
+    Threshold mirrors the original binary check (180/365 days). Past the
+    threshold, score reflects *how far* behind:
+
+      * ≤ 0 mo past threshold  → 1.0 (fresh)
+      * 0–3 mo past            → 0.85 (small drift — slight ding)
+      * 3–6 mo past            → 0.5
+      * 6–12 mo past           → 0.2
+      * 12+ mo past            → 0.0
+
+    Returns 1.0 when dates are missing so callers behave like the prior
+    binary "no drift" path on indeterminate data.
+    """
     dd, cd = _pdate(doc_date), _pdate(code_date)
     if not dd or not cd:
-        return False
-    return (cd - dd).days > (365 if gentle else 180)
+        return 1.0
+    threshold = 365 if gentle else 180
+    past = (cd - dd).days - threshold
+    if past <= 0:
+        return 1.0
+    months = past / 30
+    if months < 3:
+        return 0.85
+    if months < 6:
+        return 0.5
+    if months < 12:
+        return 0.2
+    return 0.0
+
+
+def _drifted(doc_date: str, code_date: str, gentle: bool) -> bool:
+    """Binary drift check — kept as a thin wrapper over the graded function so
+    existing callers and tests still work. Drift is "yes" when the graded score
+    drops below full freshness.
+    """
+    return _drift_grade(doc_date, code_date, gentle) < 1.0
+
+
+# --- B1: referenced-but-missing paths in agent/entry docs ------------------
+# Precision over recall (matches existing link-checking philosophy): only flag
+# refs that look unambiguously like in-repo paths. Bare filenames are too
+# noisy — a doc may say "render via report.html" without that being a checked
+# path. We require a directory separator AND skip agent-file class patterns
+# (`.cursor/rules` etc. are conventionally referenced as classes, not paths).
+_REF_PATH_RE = re.compile(r"`([\w./~%-]+)`|\(([\w./~%-]+)\)")
+_AGENT_CLASS_PATHS = (
+    ".cursor/rules", ".github/copilot-instructions",
+)
+
+
+def _ref_paths(text: str) -> set[str]:
+    """Path-like tokens from inline-code (``foo/bar.md``) and parenthetical
+    refs (foo/bar.py). Requires a path separator, a recognizable extension,
+    and skips known agent-file class patterns that are usually descriptive
+    rather than navigational.
+    """
+    out: set[str] = set()
+    for a, b in _REF_PATH_RE.findall(text):
+        tok = (a or b).strip()
+        if not tok or "://" in tok or tok.startswith("#"):
+            continue
+        if not _PATHLIKE.match(tok):
+            continue
+        bare = tok.split("#", 1)[0]
+        if "/" not in bare.rstrip("/"):
+            continue  # bare filename — too noisy (output names, informal mentions)
+        if any(bare.startswith(prefix) for prefix in _AGENT_CLASS_PATHS):
+            continue  # ".cursor/rules" etc. — usually a class description, not a path
+        # Either a directory (ends in /) or a path-with-extension we recognize.
+        if bare.endswith("/") or ext_of(bare) in _FILE_EXTS:
+            out.add(bare)
+    return out
 
 
 def run_detectors(root: Path, files, modules, agent_files, is_git):
@@ -251,8 +320,10 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                     f"Fix or remove the link in {f}"))
             # extensionless / unknown-ext unresolved → likely a doc-site route or anchor; skip
 
-    # 5. doc freshness / drift (needs git history)
-    drift = 0
+    # 5. doc freshness / drift (needs git history) — B4 graded drift.
+    # Per-doc fresh_score in [0, 1]; category aggregates with mean.
+    fresh_score_sum = 0.0
+    drift = 0  # legacy "any drift" count, kept for backward compatibility
     docs_checked = 0
     if is_git:
         for m in nonwaived:
@@ -264,12 +335,96 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                 continue
             docs_checked += 1
             gentle = (doc == m.agent_file and not m.readme_path)
-            if _drifted(ddate, m.last_code_commit, gentle):
+            grade = _drift_grade(ddate, m.last_code_commit, gentle)
+            fresh_score_sum += grade
+            if grade < 1.0:
                 drift += 1
+                # Severity tracks how stale: warn for any drift today; bumped to
+                # info on mildly stale so the fix list isn't drowned in yellow.
+                sev = "info" if grade >= 0.7 else "warn"
+                lag_label = (
+                    "slightly stale" if grade >= 0.7
+                    else ("stale" if grade > 0 else "very stale")
+                )
                 findings.append(_finding(
-                    "doc_drift", "warn", doc,
-                    f"Code in '{m.path}' changed after this doc ({m.last_code_commit} vs doc {ddate})",
+                    "doc_drift", sev, doc,
+                    f"Code in '{m.path}' changed after this doc — {lag_label} "
+                    f"(code {m.last_code_commit} vs doc {ddate})",
                     "Review and refresh the doc"))
+
+    # --- B1/B2/B3: doc tech-debt depth (findings-only; B4 already moved score) ---
+    # These flag *demonstrable desync*, never mere age. All gated on git history.
+    if is_git:
+        # B1: agent files / root README that reference paths no longer on disk.
+        candidates = list(agent_files)
+        if has_root_readme and root_mod and root_mod.readme_path:
+            candidates.append(root_mod.readme_path)
+        for doc in candidates:
+            try:
+                text = (root / doc).read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            for ref in _ref_paths(text):
+                # Resolve relative to the doc's directory; skip refs that escape
+                # the repo (we already skip absolute/url tokens in _ref_paths).
+                base = root if dir_of(doc) == "." else (root / dir_of(doc))
+                target = base / ref.rstrip("/")
+                try:
+                    inside = target.resolve().is_relative_to(root.resolve())
+                except Exception:
+                    inside = False
+                if not inside:
+                    continue
+                if target.exists():
+                    continue
+                findings.append(_finding(
+                    "doc_ref_missing", "warn", doc,
+                    f"References `{ref}` which no longer exists",
+                    f"Fix or remove the `{ref}` reference in {basename(doc)}"))
+
+        # B2: agent files at root that predate modules added later. Honest signal
+        # that the agent file has fallen behind the codebase.
+        for doc in [a for a in agent_files if dir_of(a) == "."]:
+            ddate = gitinfo.last_commit_date(root, doc)
+            if not ddate:
+                continue
+            newer_modules = []
+            for m in nonwaived:
+                if m.path == ".":
+                    continue
+                first = gitinfo.first_commit_date_for_path(root, m.path)
+                if first and first > ddate:
+                    newer_modules.append(m.path)
+            if len(newer_modules) >= 2:
+                examples = ", ".join(newer_modules[:3])
+                more = f" (+{len(newer_modules) - 3} more)" if len(newer_modules) > 3 else ""
+                findings.append(_finding(
+                    "doc_predates_modules", "warn", doc,
+                    f"{basename(doc)} last updated {ddate}; "
+                    f"{len(newer_modules)} module(s) added since: {examples}{more}",
+                    f"Review {basename(doc)} — newer modules likely aren't documented there"))
+
+        # B3: written-once / never-revised on a repo with significant churn.
+        # Significant = >= 100 total commits (below that we don't have a real
+        # "should have been revised" expectation). One commit means it was
+        # written and never touched.
+        total_churn = gitinfo.total_commit_count(root)
+        if total_churn >= 100:
+            once_candidates: list[str] = list(agent_files)
+            if has_root_readme and root_mod and root_mod.readme_path:
+                once_candidates.append(root_mod.readme_path)
+            for doc in once_candidates:
+                count = gitinfo.commit_count_for_path(root, doc)
+                if count != 1:
+                    continue
+                first = gitinfo.first_commit_date_for_path(root, doc)
+                when = first[:7] if first else "long ago"  # YYYY-MM
+                findings.append(_finding(
+                    "doc_written_once", "info", doc,
+                    f"{basename(doc)} written {when}, never revised across "
+                    f"{total_churn} commits",
+                    f"Skim {basename(doc)} for staleness — a doc untouched across "
+                    "hundreds of commits is rarely still accurate"))
 
     # mcp presence (conditional; resolution of referenced paths is a later increment)
     mcp_present = any(
@@ -292,6 +447,9 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
         "broken_links": broken,
         "links_checked": links_checked,
         "drift_count": drift,
+        # B4: graded freshness — sum of per-doc scores in [0,1]; scoring uses
+        # this divided by docs_checked instead of the binary drift count.
+        "fresh_score_sum": fresh_score_sum,
         "docs_checked": docs_checked,
         "is_git": is_git,
         "mcp_present": mcp_present,

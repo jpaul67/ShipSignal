@@ -67,6 +67,50 @@ def last_commit_date(root: Path, path: str) -> str | None:
     return out.strip() if out and out.strip() else None
 
 
+def commit_count_for_path(root: Path, path: str) -> int:
+    """How many commits touched ``path`` over its history. 0 if not tracked."""
+    out = _run(["git", "rev-list", "--count", "HEAD", "--", path], root)
+    try:
+        return int(out.strip()) if out and out.strip() else 0
+    except ValueError:
+        return 0
+
+
+def first_commit_date_for_path(root: Path, path: str) -> str | None:
+    """First commit date (YYYY-MM-DD) that touched ``path``, or None.
+
+    Uses ``git log --diff-filter=A`` to find the introduction commit (the one
+    that first added a file matching the path). Falls back to oldest matching
+    commit when no add-event is found (e.g. for a dir that pre-existed via a
+    rename or filter-branch).
+
+    Note: ``git log --reverse -1`` returns the NEWEST commit (the count
+    limit is applied before the reversal), so we take all matching commits
+    and pick the first line. The set is small in practice (one or two adds
+    per path, or all commits touching a doc/dir).
+    """
+    out = _run(
+        ["git", "log", "--diff-filter=A", "--reverse", "--format=%cs", "--", path],
+        root,
+    )
+    if out and out.strip():
+        return out.strip().splitlines()[0]
+    # Fallback: oldest commit touching the path, even without a recorded add.
+    out = _run(["git", "log", "--reverse", "--format=%cs", "--", path], root)
+    if out and out.strip():
+        return out.strip().splitlines()[0]
+    return None
+
+
+def total_commit_count(root: Path) -> int:
+    """Total non-merge commits on HEAD. 0 on a non-git repo."""
+    out = _run(["git", "rev-list", "--count", "--no-merges", "HEAD"], root)
+    try:
+        return int(out.strip()) if out and out.strip() else 0
+    except ValueError:
+        return 0
+
+
 def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
     """Clone a repo for scanning. Always full history (never ``--depth``: freshness,
     adoption detection, and the before/after delta all need the whole commit graph).

@@ -1,13 +1,17 @@
 """Smoke + unit tests (stdlib unittest — no third-party dep)."""
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from shipsignal import scanner
 from shipsignal.modules import _parse_pnpm_packages, _code_dirs, AGENT_BASENAMES, is_agent_file
-from shipsignal.detectors import _drifted, _skip_link, _agent_usefulness, _best_usefulness
+from shipsignal.detectors import (
+    _drifted, _drift_grade, _skip_link, _agent_usefulness, _best_usefulness, _ref_paths,
+)
 from shipsignal.scoring import score_scan, grade_for
 from shipsignal.setupcheck import _has_arch_doc, ARCH_MODULE_THRESHOLD, detect_setup
+from shipsignal import gitinfo
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -263,6 +267,188 @@ class TestArchitectureDoc(unittest.TestCase):
         )
         # No arch doc present — should appear in setup_missing.
         self.assertIn("architecture_doc", metrics["setup_missing"])
+
+
+# --- Feature B: doc tech-debt depth ----------------------------------------
+
+
+class TestDriftGrade(unittest.TestCase):
+    """B4: graded drift — score reflects *how far* behind, not yes/no."""
+
+    def test_fresh_full_credit(self):
+        # 31 days lag, threshold 180 → past <= 0 → 1.0
+        self.assertEqual(_drift_grade("2026-05-01", "2026-06-01", gentle=False), 1.0)
+
+    def test_indeterminate_dates_full_credit(self):
+        # Unparseable dates should not punish — preserves legacy behavior.
+        self.assertEqual(_drift_grade("bad", "2026-06-01", gentle=False), 1.0)
+        self.assertEqual(_drift_grade("2026-05-01", "", gentle=False), 1.0)
+
+    def test_small_drift_small_ding(self):
+        # ~1 month past 180d threshold → 0.85
+        self.assertAlmostEqual(_drift_grade("2026-01-01", "2026-08-01", gentle=False), 0.85)
+
+    def test_increasing_lag_drops_grade(self):
+        g_small = _drift_grade("2025-01-01", "2025-08-15", gentle=False)  # ~6mo past
+        g_big = _drift_grade("2024-01-01", "2026-01-01", gentle=False)    # >12mo past
+        self.assertGreater(g_small, g_big)
+        self.assertEqual(g_big, 0.0)
+
+    def test_gentle_preserves_for_agent_files(self):
+        # 8mo lag: not gentle = drifted; gentle = still fresh
+        self.assertLess(_drift_grade("2026-01-01", "2026-09-01", gentle=False), 1.0)
+        self.assertEqual(_drift_grade("2026-01-01", "2026-09-01", gentle=True), 1.0)
+
+
+class TestRefPathsHeuristic(unittest.TestCase):
+    """B1: referenced-but-missing — what counts as a checkable path token."""
+
+    def test_path_with_separator_picked_up(self):
+        refs = _ref_paths("see `src/legacy/foo.py` for details")
+        self.assertIn("src/legacy/foo.py", refs)
+
+    def test_directory_ref_picked_up(self):
+        refs = _ref_paths("the [old code](packages/legacy/) used to live here")
+        self.assertIn("packages/legacy/", refs)
+
+    def test_bare_filename_ignored(self):
+        # Bare names too noisy — output examples, informal mentions, etc.
+        refs = _ref_paths("the tool produces `readiness.json` and `impact.json`")
+        self.assertEqual(refs, set())
+
+    def test_url_and_anchor_skipped(self):
+        refs = _ref_paths("see `https://example.com/x` and `#section`")
+        self.assertEqual(refs, set())
+
+    def test_agent_class_pattern_skipped(self):
+        # ".cursor/rules" is conventionally a class description, not a path.
+        refs = _ref_paths("we detect `.cursor/rules` and `.github/copilot-instructions.md`")
+        # Both are class refs — should be skipped to avoid false positives in
+        # README/tool-overview docs that describe what's detected.
+        self.assertEqual(refs, set())
+
+    def test_prose_with_spaces_skipped(self):
+        # PATHLIKE regex already excludes anything with spaces.
+        refs = _ref_paths("see `(this is not a path)`")
+        self.assertEqual(refs, set())
+
+
+def _git_init_repo(d: Path):
+    """Initialize a tiny git repo with deterministic identity. Returns the dir."""
+    env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env={**env, "PATH": ""})
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env={**env, "PATH": ""})
+    return env
+
+
+def _git_commit(d: Path, env: dict, message: str, date: str):
+    """Commit all changes with a fixed author + commit date (YYYY-MM-DD)."""
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": ""}
+    subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message], cwd=d, check=True, env=e)
+
+
+class TestGitInfoHelpers(unittest.TestCase):
+    """B helpers: commit_count_for_path, first_commit_date_for_path."""
+
+    def test_commit_count_and_first_date(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init_repo(d)
+        (d / "README.md").write_text("v1", encoding="utf-8")
+        _git_commit(d, env, "init", "2025-01-15 12:00:00")
+        # touch again
+        (d / "README.md").write_text("v2", encoding="utf-8")
+        _git_commit(d, env, "update", "2026-05-10 12:00:00")
+
+        self.assertEqual(gitinfo.commit_count_for_path(d, "README.md"), 2)
+        self.assertEqual(gitinfo.first_commit_date_for_path(d, "README.md"), "2025-01-15")
+        # New file added later — first date should be the addition commit.
+        (d / "extra.md").write_text("new", encoding="utf-8")
+        _git_commit(d, env, "add extra", "2026-06-01 12:00:00")
+        self.assertEqual(gitinfo.first_commit_date_for_path(d, "extra.md"), "2026-06-01")
+        self.assertGreaterEqual(gitinfo.total_commit_count(d), 3)
+
+
+class TestDocTechDebtFindings(unittest.TestCase):
+    """B1/B2/B3 emit findings without changing the doc_freshness category math."""
+
+    def _build_repo(self) -> tuple[Path, dict]:
+        d = Path(tempfile.mkdtemp())
+        env = _git_init_repo(d)
+        return d, env
+
+    def test_b1_referenced_but_missing(self):
+        d, env = self._build_repo()
+        (d / "README.md").write_text(
+            "# Repo\n\nSee `src/legacy/old.py` for the old impl.\n", encoding="utf-8"
+        )
+        (d / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertIn("doc_ref_missing", kinds)
+        evidences = [f["evidence"] for f in result["findings"]
+                     if f["detector"] == "doc_ref_missing"]
+        self.assertTrue(any("src/legacy/old.py" in e for e in evidences))
+
+    def test_b1_existing_path_not_flagged(self):
+        d, env = self._build_repo()
+        (d / "README.md").write_text(
+            "# Repo\n\nMain is `src/main.py`.\n", encoding="utf-8"
+        )
+        (d / "src").mkdir()
+        (d / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertNotIn("doc_ref_missing", kinds)
+
+    def test_b2_predates_modules(self):
+        d, env = self._build_repo()
+        # CLAUDE.md committed first; then two modules added later.
+        (d / "README.md").write_text("# repo\n" * 20, encoding="utf-8")
+        (d / "CLAUDE.md").write_text("# Agent\n\nRun `npm test`.\n", encoding="utf-8")
+        _git_commit(d, env, "init agent", "2025-06-01 12:00:00")
+        for sub in ("alpha", "beta"):
+            (d / sub).mkdir()
+            (d / sub / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        _git_commit(d, env, "add modules", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertIn("doc_predates_modules", kinds)
+        ev = next(f["evidence"] for f in result["findings"]
+                  if f["detector"] == "doc_predates_modules")
+        self.assertIn("2025-06-01", ev)
+
+    def test_b3_written_once_needs_churn(self):
+        """B3 stays quiet below 100 commits — small repos don't get nagged."""
+        d, env = self._build_repo()
+        (d / "README.md").write_text("# repo\n" * 20, encoding="utf-8")
+        _git_commit(d, env, "init", "2025-01-15 12:00:00")
+        # A few more commits — well under the 100-commit churn threshold.
+        for i in range(5):
+            (d / f"file{i}.py").write_text(f"# {i}\n", encoding="utf-8")
+            _git_commit(d, env, f"f{i}", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertNotIn("doc_written_once", kinds)
+
+    def test_b4_graded_drift_in_freshness_metric(self):
+        """The score uses fresh_score_sum, not the legacy binary drift_count."""
+        d, env = self._build_repo()
+        (d / "README.md").write_text("# old\n" * 20, encoding="utf-8")
+        _git_commit(d, env, "old doc", "2024-01-01 12:00:00")
+        (d / "src").mkdir()
+        (d / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+        # ~2.4 years past 180d threshold → grade 0.0 ("very stale").
+        _git_commit(d, env, "recent code", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        self.assertEqual(result["metrics"]["docs_checked"] >= 1, True)
+        self.assertAlmostEqual(result["metrics"]["fresh_score_sum"], 0.0, places=1)
+        fresh = next(c for c in result["categories"] if c["id"] == "doc_freshness")
+        # 12 * (0.0 / 1) = 0
+        self.assertEqual(fresh["points"], 0.0)
 
 
 if __name__ == "__main__":

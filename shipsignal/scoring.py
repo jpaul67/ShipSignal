@@ -89,12 +89,16 @@ def score_scan(metrics: dict) -> tuple[int, str, list[Category]]:
     integrity = 13.0 if checked == 0 else round(13 * (1 - metrics["broken_links"] / checked), 1)
     cats.append(Category("doc_integrity", integrity, 13, "scored"))
 
-    # Doc freshness /12 — needs git history; proportional to share of fresh docs.
+    # Doc freshness /12 — needs git history; graded drift (B4): each doc scores
+    # in [0, 1] by how far past threshold it has fallen, not yes/no.
     if not metrics["is_git"]:
         cats.append(Category("doc_freshness", None, 12, "indeterminate"))
     else:
         docs = metrics.get("docs_checked", 0)
-        fresh = 12.0 if docs == 0 else round(12 * (1 - metrics["drift_count"] / docs), 1)
+        if docs == 0:
+            fresh = 12.0
+        else:
+            fresh = round(12 * (metrics.get("fresh_score_sum", docs * 1.0) / docs), 1)
         cats.append(Category("doc_freshness", fresh, 12, "scored"))
 
     scored = [c for c in cats if c.status == "scored" and c.max]
