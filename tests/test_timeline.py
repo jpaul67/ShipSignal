@@ -10,9 +10,9 @@ from shipsignal.timeline import (
 )
 
 
-def _commit(d, ai=False, files=None, lines=20):
+def _commit(d, ai=False, files=None, lines=20, email="dev@x"):
     trailers = ["Co-Authored-By: Claude <noreply@anthropic.com>"] if ai else []
-    return Commit("h", d, "dev@x", "feat: x", trailers, files or ["src/a.py"], lines, 0)
+    return Commit("h", d, email, "feat: x", trailers, files or ["src/a.py"], lines, 0)
 
 
 class TestChoosePeriod(unittest.TestCase):
@@ -72,6 +72,46 @@ class TestBuildTrajectory(unittest.TestCase):
         for p in t["periods"]:
             if p["health_score"] is None:
                 self.assertEqual(p["health_status"], "insufficient")
+
+
+class TestPerPeriodBreadth(unittest.TestCase):
+    """Feature C: trajectory buckets carry per-period breadth_pct (or None
+    when the bucket has too few contributors to compute it honestly)."""
+
+    def test_solo_period_breadth_none(self):
+        # 120 commits, all from one author — breadth must be None per period.
+        commits = []
+        start = date(2026, 1, 1)
+        for i in range(120):
+            commits.append(_commit(start + timedelta(days=int(i * 1.4)), ai=(i % 2 == 0)))
+        t = build_trajectory(commits)
+        self.assertEqual(t["status"], "ok")
+        for p in t["periods"]:
+            self.assertIsNone(p["breadth_pct"], f"single-author period leaked breadth: {p}")
+
+    def test_multi_contributor_period_breadth(self):
+        commits = []
+        start = date(2026, 1, 1)
+        # 4 contributors, AI usage growing across the window
+        emails = ["a@x", "b@x", "c@x", "d@x"]
+        for i in range(120):
+            d = start + timedelta(days=int(i * 1.4))
+            email = emails[i % 4]
+            # First half — only "a" uses AI. Second half — a, b, c.
+            if i < 60:
+                ai = (email == "a@x")
+            else:
+                ai = email in ("a@x", "b@x", "c@x")
+            commits.append(_commit(d, ai=ai, email=email))
+        t = build_trajectory(commits)
+        self.assertEqual(t["status"], "ok")
+        # Some periods must have a computed breadth (≥3 contributors per bucket).
+        scored = [p for p in t["periods"] if p["breadth_pct"] is not None]
+        self.assertTrue(scored, "no period computed breadth despite 4 contributors")
+        # Last period (everyone but d uses AI → 3 of 4 = 75%; allow some
+        # variance based on bucketing).
+        last_scored = scored[-1]["breadth_pct"]
+        self.assertGreater(last_scored, 50.0)
 
 
 if __name__ == "__main__":

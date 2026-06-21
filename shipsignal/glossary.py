@@ -23,6 +23,17 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "bound: squash-merges drop trailers. Banded None / Emerging (<10%) / "
                "Established (<50%) / Pervasive (≥50%).",
     },
+    "adoption_breadth": {
+        "short": "What fraction of active humans on the team have at least one "
+                 "AI-coauthored commit — is adoption spreading or stuck with a few "
+                 "early adopters? Team-level only, never per person.",
+        "tip": "Aggregate: (humans with ≥1 AI commit) ÷ (humans with any commit) in "
+               "the window. n/a below 3 active contributors (not meaningful and would "
+               "risk de-anonymization). Trend compares first-half vs second-half "
+               "breadth (growing/flat/shrinking, ±10pp threshold). HARD non-goal: "
+               "ShipSignal does NOT score, rank, or list individual developers — the "
+               "function structurally returns only aggregates.",
+    },
     "delivery_health": {
         "short": "How sound the team's shipping habits are by general engineering "
                  "norms — deliberately NOT credited to AI. High adoption means little "

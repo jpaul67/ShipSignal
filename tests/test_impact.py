@@ -6,9 +6,12 @@ from pathlib import Path
 from shipsignal import impact
 from shipsignal.impact import (
     Commit,
+    MIN_CONTRIBUTORS_FOR_BREADTH,
+    _BREADTH_ALLOWED_KEYS,
     adoption_level,
     assess_confidence,
     baseline_gate,
+    compute_breadth,
     compute_impact,
     delivery_health,
     detect_adoption_date,
@@ -383,6 +386,131 @@ class TestUnifiedReport(unittest.TestCase):
         # The impact's </body> should be replaced — readiness section injected
         self.assertGreater(h.count("</body>"), 0)
         self.assertEqual(h.count("</html>"), 1)
+
+
+# --- Feature C: team-level AI-adoption BREADTH (aggregate only) ------------
+
+
+def _human(email: str, ai: bool = False, date_str: str = "2026-01-01") -> Commit:
+    trailers = ["Co-Authored-By: Claude <c@anthropic.com>"] if ai else []
+    return _c(email=email, date_str=date_str, trailers=trailers)
+
+
+class TestBreadthStructuralGuarantee(unittest.TestCase):
+    """The hard non-goal: breadth output structurally cannot leak per-person data."""
+
+    def test_allowed_keys_only_when_scored(self):
+        commits = [_human(f"dev{i}@ex.com", ai=(i % 2 == 0)) for i in range(4)]
+        out = compute_breadth(commits)
+        self.assertEqual(out["status"], "scored")
+        # Every key in the output must be in the explicit allow-list — any
+        # extra key risks leaking an identity field in a future refactor.
+        extras = set(out.keys()) - _BREADTH_ALLOWED_KEYS
+        self.assertEqual(extras, set(), f"unexpected keys in breadth: {extras}")
+
+    def test_allowed_keys_only_when_na(self):
+        out = compute_breadth([_human("solo@ex.com")])
+        self.assertEqual(out["status"], "n/a")
+        extras = set(out.keys()) - _BREADTH_ALLOWED_KEYS
+        self.assertEqual(extras, set())
+
+    def test_no_email_in_values(self):
+        # Strings in the output must NOT contain author identifiers.
+        commits = [_human("alice@ex.com", ai=True), _human("bob@ex.com"),
+                   _human("carol@ex.com", ai=True), _human("dave@ex.com")]
+        out = compute_breadth(commits)
+        joined = " ".join(str(v) for v in out.values() if v is not None)
+        for email in ("alice", "bob", "carol", "dave", "ex.com"):
+            self.assertNotIn(email, joined, f"{email} appears in breadth output")
+
+
+class TestBreadthComputation(unittest.TestCase):
+    def test_na_below_threshold(self):
+        # 2 contributors — too few.
+        commits = [_human("a@x", ai=True), _human("b@x")]
+        out = compute_breadth(commits)
+        self.assertEqual(out["status"], "n/a")
+        self.assertEqual(out["active_contributors"], 2)
+        self.assertLess(out["active_contributors"], MIN_CONTRIBUTORS_FOR_BREADTH)
+        self.assertIsNone(out["breadth_pct"])
+
+    def test_aggregate_only(self):
+        # 4 humans, 2 with AI: breadth 50%.
+        commits = [
+            _human("a@x", ai=True), _human("a@x", ai=True),  # one human, two commits
+            _human("b@x", ai=True),
+            _human("c@x"),
+            _human("d@x"),
+        ]
+        out = compute_breadth(commits)
+        self.assertEqual(out["status"], "scored")
+        self.assertEqual(out["active_contributors"], 4)
+        self.assertEqual(out["ai_contributors"], 2)
+        self.assertEqual(out["breadth_pct"], 50.0)
+
+    def test_ai_agent_bot_not_counted_as_contributor(self):
+        # AI-agent bot commits shouldn't inflate either the active count or
+        # the AI count (a bot is automation, not a human adopter).
+        commits = [
+            _c(email="gpt-engineer[bot]@users.noreply.github.com", date_str="2026-01-01"),
+            _human("alice@x", ai=True),
+            _human("bob@x"),
+            _human("carol@x"),
+        ]
+        out = compute_breadth(commits)
+        self.assertEqual(out["active_contributors"], 3)
+        self.assertEqual(out["ai_contributors"], 1)
+
+    def test_note_always_present(self):
+        for commits in ([_human("a@x")],
+                        [_human(f"d{i}@x", ai=(i == 0)) for i in range(3)]):
+            out = compute_breadth(commits)
+            self.assertIn("does not score individuals", out["note"])
+
+
+class TestBreadthTrend(unittest.TestCase):
+    def test_growing(self):
+        # First half: 1 of 3 humans uses AI. Second half: 3 of 3.
+        commits = (
+            [_human("a@x", ai=True, date_str="2026-01-05"),
+             _human("b@x", date_str="2026-01-06"),
+             _human("c@x", date_str="2026-01-07")]
+            + [_human("a@x", ai=True, date_str="2026-04-05"),
+               _human("b@x", ai=True, date_str="2026-04-06"),
+               _human("c@x", ai=True, date_str="2026-04-07")]
+        )
+        out = compute_breadth(commits)
+        self.assertEqual(out["trend"], "growing")
+
+    def test_flat(self):
+        # Same breadth in both halves.
+        commits = (
+            [_human("a@x", ai=True, date_str="2026-01-05"),
+             _human("b@x", date_str="2026-01-06"),
+             _human("c@x", date_str="2026-01-07")]
+            + [_human("a@x", ai=True, date_str="2026-04-05"),
+               _human("b@x", date_str="2026-04-06"),
+               _human("c@x", date_str="2026-04-07")]
+        )
+        out = compute_breadth(commits)
+        self.assertEqual(out["trend"], "flat")
+
+    def test_unknown_below_floor(self):
+        # 2 contributors — trend can't be computed (below the floor).
+        commits = [_human("a@x", ai=True, date_str="2026-01-05"),
+                   _human("b@x", date_str="2026-04-05")]
+        out = compute_breadth(commits)
+        self.assertEqual(out["trend"], None)  # n/a path doesn't compute trend
+
+
+class TestBreadthInResult(unittest.TestCase):
+    def test_self_impact_includes_breadth(self):
+        result = compute_impact(REPO, repo_label="shipsignal")
+        self.assertIn("breadth", result.get("adoption", {}))
+        br = result["adoption"]["breadth"]
+        # Structural again — at every entry point.
+        extras = set(br.keys()) - _BREADTH_ALLOWED_KEYS
+        self.assertEqual(extras, set())
 
 
 if __name__ == "__main__":

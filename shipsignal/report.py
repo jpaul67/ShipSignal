@@ -184,6 +184,17 @@ def render_impact(result: dict) -> str:
     if ad.get("adoption_date"):
         L.append(f"   adoption date {ad['adoption_date']} "
                  f"({'auto' if ad['adoption_auto_detected'] else 'override'})")
+    # Feature C: team-level breadth — aggregate only, with the non-goal line.
+    br = ad.get("breadth") or {}
+    if br.get("status") == "scored":
+        trend_label = {"growing": " · growing", "shrinking": " · shrinking",
+                       "flat": " · flat", "unknown": ""}.get(br.get("trend", ""), "")
+        L.append(f"   breadth {br['breadth_pct']:.0f}% — "
+                 f"{br['ai_contributors']} of {br['active_contributors']} active "
+                 f"contributors{trend_label}")
+        L.append("   (team-level only — ShipSignal does not score individuals)")
+    elif br.get("status") == "n/a":
+        L.append(f"   breadth: n/a — {br.get('reason', 'too few contributors')}")
     series = ad.get("weekly_series", [])
     if series:
         spark = _sparkline([s[1] for s in series], max_val=1.0)
@@ -249,17 +260,31 @@ def render_trajectory_cli(result: dict) -> str:
     adoption = [p["adoption_pct"] for p in periods]
     health = [float(p["health_score"]) if p["health_score"] is not None else None
               for p in periods]
+    # Feature C: per-period breadth sparkline + column (n/a when below the
+    # contributor floor — team-level only, no per-person data).
+    breadth = [p.get("breadth_pct") for p in periods]
+    any_breadth = any(b is not None for b in breadth)
     L = ["", "  Trajectory — adoption & delivery health over time",
          f"  {len(periods)} periods · ~{t['period_days']}d each · "
          "parallel timelines, NOT a causal link (blank = quiet/thin period)", "",
          f"   adoption  {_spark_series(adoption, 100)}   0–100%",
-         f"   health    {_spark_series(health, 100)}   0–100",
-         f"   {periods[0]['start']} → {periods[-1]['start']}", "",
-         "   period       commits  adoption  health"]
+         f"   health    {_spark_series(health, 100)}   0–100"]
+    if any_breadth:
+        L.append(f"   breadth   {_spark_series(breadth, 100)}   0–100% (team-level)")
+    L += [f"   {periods[0]['start']} → {periods[-1]['start']}", ""]
+    if any_breadth:
+        L.append("   period       commits  adoption  health  breadth")
+    else:
+        L.append("   period       commits  adoption  health")
     for p in periods:
         ad = f"{p['adoption_pct']:.0f}%" if p["adoption_pct"] is not None else "—"
         h = str(p["health_score"]) if p["health_score"] is not None else "—"
-        L.append(f"   {p['start']}  {p['commits']:<7}  {ad:<8}  {h}")
+        if any_breadth:
+            b_pct = p.get("breadth_pct")
+            br = f"{b_pct:.0f}%" if b_pct is not None else "—"
+            L.append(f"   {p['start']}  {p['commits']:<7}  {ad:<8}  {h:<6}  {br}")
+        else:
+            L.append(f"   {p['start']}  {p['commits']:<7}  {ad:<8}  {h}")
     L.append("")
     return "\n".join(L)
 
@@ -308,6 +333,15 @@ def render_impact_markdown(result: dict) -> str:
                  f"({'auto-detected' if ad['adoption_auto_detected'] else 'override'})")
     if ad.get("per_tool"):
         L.append("- Per tool: " + ", ".join(f"`{k}` ({v})" for k, v in ad["per_tool"].items()))
+    br = ad.get("breadth") or {}
+    if br.get("status") == "scored":
+        trend = br.get("trend") or ""
+        trend_md = f" · trend: **{trend}**" if trend and trend != "unknown" else ""
+        L.append(f"- **Breadth:** {br['breadth_pct']:.0f}% — {br['ai_contributors']} "
+                 f"of {br['active_contributors']} active contributors{trend_md}.  \n"
+                 f"  *Team-level only — ShipSignal does not score individuals.*")
+    elif br.get("status") == "n/a":
+        L.append(f"- *Breadth: n/a — {br.get('reason', 'too few contributors')}.*")
     L.append("")
 
     if dh["status"] == "scored":
@@ -517,6 +551,23 @@ def render_impact_html(result: dict) -> str:
     else:
         traj_block = ""
 
+    # --- breadth (Feature C) — aggregate only, non-goal line shown inline ---
+    br = ad.get("breadth") or {}
+    if br.get("status") == "scored":
+        trend = br.get("trend") or ""
+        trend_html = (f" · <b>{_esc(trend)}</b>" if trend and trend != "unknown" else "")
+        breadth_html = (
+            f"<br>{_tip('Breadth', 'adoption_breadth')}: {br['breadth_pct']:.0f}% — "
+            f"{br['ai_contributors']} of {br['active_contributors']} active "
+            f"contributors{trend_html}"
+            f"<br><span class='hint'>Team-level only — ShipSignal does not score individuals.</span>"
+        )
+    elif br.get("status") == "n/a":
+        breadth_html = (f"<br>{_tip('Breadth', 'adoption_breadth')}: n/a — "
+                        f"<span class='hint'>{_esc(br.get('reason', 'too few contributors'))}</span>")
+    else:
+        breadth_html = ""
+
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>
 body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
@@ -557,6 +608,7 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
   <b>AI adoption {pct:.1f}%</b>
   <span class="hint">({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)</span><br>
   {("Adoption date: <code>" + _esc(ad['adoption_date']) + "</code>") if ad.get('adoption_date') else "<span class='hint'>No sustained adoption window detected.</span>"}
+  {breadth_html}
   {("<br>Rate / week: <span class='spark'>" + spark + "</span>") if spark else ""}
   <div class="hint" style="margin-top:6px">{_esc(glossary.short('ai_adoption'))}</div>
 </div>

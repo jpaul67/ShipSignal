@@ -372,6 +372,93 @@ def quality_metrics(commits: list[Commit]) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Feature C — Team-level AI-adoption BREADTH (aggregate only, never per-person).
+#
+# Hard non-goal: ShipSignal does NOT score, rank, or list individual developers.
+# This function is structured so it CANNOT emit per-person stats — it returns
+# only counts and the aggregate fraction. A unit test asserts the return dict's
+# keys are exactly the allowed set.
+# ---------------------------------------------------------------------------
+MIN_CONTRIBUTORS_FOR_BREADTH = 3
+_BREADTH_ALLOWED_KEYS = frozenset({
+    "status", "reason", "active_contributors", "ai_contributors",
+    "breadth_pct", "trend", "note",
+})
+
+
+def _breadth_trend(human_commits: list[Commit]) -> str:
+    """Classify whether breadth is growing / flat / shrinking over the window.
+
+    Compares first-half vs second-half breadth (active humans with ≥1 AI commit).
+    Coarse on purpose — single-period noise on small teams shouldn't read as a
+    trend. Returns "unknown" when there isn't enough span to compare.
+    """
+    if len(human_commits) < 2 * MIN_CONTRIBUTORS_FOR_BREADTH:
+        return "unknown"
+    dates = sorted({c.date for c in human_commits})
+    if len(dates) < 4:
+        return "unknown"
+    mid = dates[len(dates) // 2]
+    first_half = [c for c in human_commits if c.date < mid]
+    second_half = [c for c in human_commits if c.date >= mid]
+
+    def _frac(part: list[Commit]) -> float | None:
+        active = {c.email for c in part}
+        if len(active) < MIN_CONTRIBUTORS_FOR_BREADTH:
+            return None
+        ai = {c.email for c in part if c.ai_authored}
+        return len(ai) / len(active)
+
+    fh, sh = _frac(first_half), _frac(second_half)
+    if fh is None or sh is None:
+        return "unknown"
+    delta = sh - fh
+    if delta >= 0.10:
+        return "growing"
+    if delta <= -0.10:
+        return "shrinking"
+    return "flat"
+
+
+def compute_breadth(commits: list[Commit]) -> dict:
+    """Aggregate AI-adoption breadth for the team.
+
+    Only HUMAN commits count toward "active contributors" (an AI-agent bot
+    isn't a person who adopted AI). Below MIN_CONTRIBUTORS_FOR_BREADTH active
+    humans returns status="n/a" with no breadth — protects small teams from
+    de-anonymization and avoids noise.
+
+    The returned dict carries only aggregates — see _BREADTH_ALLOWED_KEYS.
+    """
+    human = [c for c in commits if not c.is_ai_agent]
+    active = {c.email for c in human}
+    n_active = len(active)
+
+    if n_active < MIN_CONTRIBUTORS_FOR_BREADTH:
+        return {
+            "status": "n/a",
+            "reason": (f"only {n_active} active contributor(s) — breadth needs "
+                       f"≥{MIN_CONTRIBUTORS_FOR_BREADTH} to be meaningful and to "
+                       "avoid de-anonymization on small teams"),
+            "active_contributors": n_active,
+            "ai_contributors": None,
+            "breadth_pct": None,
+            "trend": None,
+            "note": "Team-level only — ShipSignal does not score individuals.",
+        }
+    ai_contributors = {c.email for c in human if c.ai_authored}
+    breadth_pct = round(100 * len(ai_contributors) / n_active, 1)
+    return {
+        "status": "scored",
+        "active_contributors": n_active,
+        "ai_contributors": len(ai_contributors),
+        "breadth_pct": breadth_pct,
+        "trend": _breadth_trend(human),
+        "note": "Team-level only — ShipSignal does not score individuals.",
+    }
+
+
 def people_metrics(commits: list[Commit]) -> dict:
     if not commits:
         return {"contributors": 0, "solo": True}
@@ -721,6 +808,9 @@ def compute_impact(
         "adoption_auto_detected": adoption_date_override is None,
         "per_tool": _per_tool_counts(commits),
         "weekly_series": _weekly_ai_series(commits),
+        # Feature C: team-level breadth (aggregate only — see compute_breadth
+        # docstring; structurally cannot emit per-person data).
+        "breadth": compute_breadth(commits),
         "note": "Lower bound — squash-merges drop trailers; gh PR data could recover them.",
     }
 

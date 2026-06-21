@@ -18,6 +18,7 @@ from datetime import timedelta
 
 from .impact import (
     Commit,
+    MIN_CONTRIBUTORS_FOR_BREADTH,
     change_shape_metrics,
     delivery_health,
     flow_metrics,
@@ -44,6 +45,8 @@ class Period:
     adoption_pct: float | None   # None = no commits in this period (a gap)
     health_score: int | None     # None = empty or below the per-bucket floor
     health_status: str           # "scored" | "insufficient"
+    breadth_pct: float | None = None     # Feature C: per-period team breadth %.
+                                         # None = below MIN_CONTRIBUTORS_FOR_BREADTH.
 
 
 def _choose_period_days(span_days: int, n_commits: int) -> int:
@@ -98,6 +101,16 @@ def build_trajectory(commits: list[Commit]) -> dict:
             "people": people_metrics(b),
         }
         dh = delivery_health(b, m, min_commits=MIN_BUCKET_HEALTH_COMMITS)
+        # Feature C: per-period breadth — same aggregate definition as the
+        # window-wide breadth, gated on the same contributor floor so single-
+        # contributor periods don't show as 0% or 100%.
+        humans_in_bucket = [c for c in b if not c.is_ai_agent]
+        active_emails = {c.email for c in humans_in_bucket}
+        if len(active_emails) >= MIN_CONTRIBUTORS_FOR_BREADTH:
+            ai_emails = {c.email for c in humans_in_bucket if c.ai_authored}
+            bucket_breadth = round(100 * len(ai_emails) / len(active_emails), 1)
+        else:
+            bucket_breadth = None
         periods.append(Period(
             start=start.isoformat(),
             end=end.isoformat(),
@@ -105,6 +118,7 @@ def build_trajectory(commits: list[Commit]) -> dict:
             adoption_pct=round(100 * ai / len(b), 1),
             health_score=dh["score"] if dh["status"] == "scored" else None,
             health_status=dh["status"],
+            breadth_pct=bucket_breadth,
         ))
 
     return {
