@@ -36,7 +36,11 @@ DOC_EXTS = {".md", ".markdown", ".rst", ".txt"}
 SOURCE_ROOTS = {"src", "lib", "app", "packages", "crates", "apps", "modules", "pkg"}
 AGENT_BASENAMES = {
     "claude.md", "agents.md", "gemini.md", "copilot-instructions.md",
-    ".cursorrules", ".windsurfrules",
+    ".cursorrules", ".windsurfrules", ".clinerules",
+    # .mcp.json is intentionally NOT here — it's a tool config (consumed by
+    # MCP-aware clients), not prose context, and it's already credited by
+    # setupcheck.mcp_resolves. Including it would double-count and fail the
+    # prose-based A2 usefulness heuristic confusingly.
 }
 
 

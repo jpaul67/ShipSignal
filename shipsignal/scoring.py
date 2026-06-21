@@ -42,16 +42,31 @@ def score_scan(metrics: dict) -> tuple[int, str, list[Category]]:
         pts = 0
     cats.append(Category("entry_point", pts, 20, "scored"))
 
-    # Agent instructions /15 — size-scaled.
+    # Agent instructions /15 — size-scaled (A1) and depth-graded (A2).
+    # Depth grade is heuristic (looks for build/test tokens + a structure pointer);
+    # disclosed in the glossary. Absent => 0; present-but-thin => partial credit
+    # (the file exists but doesn't help an agent build/test).
     if metrics["is_small_repo"] and not metrics["has_agent_file"]:
         cats.append(Category("agent_instructions", None, None, "n/a"))
     else:
+        root_use = metrics.get("agent_usefulness_root")
+        nested_use = metrics.get("agent_usefulness_nested")
         if metrics["has_root_agent_file"]:
-            pts = 15
+            # Best agent file is at the root — full credit when actionable.
+            pts = {
+                "actionable": 15.0,
+                "actionable_no_structure": 11.0,
+                "thin": 9.0,
+            }.get(root_use, 15.0)  # fallback to full if grade missing
         elif metrics["has_agent_file"]:
-            pts = 11  # only nested agent files
+            # Only nested agent files — still helpful, but less discoverable.
+            pts = {
+                "actionable": 9.0,
+                "actionable_no_structure": 7.0,
+                "thin": 5.0,
+            }.get(nested_use, 7.0)
         else:
-            pts = 0
+            pts = 0.0
         cats.append(Category("agent_instructions", pts, 15, "scored"))
 
     # Module coverage /20.

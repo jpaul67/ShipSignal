@@ -30,6 +30,57 @@ CI_FILES = {
     ".drone.yml", "bitbucket-pipelines.yml",
 }
 
+# A3: architecture-doc check. Only *expected* on multi-module repos — below this
+# module count, an architecture doc is informative but not required (avoids
+# nagging a 200-line utility for an ARCHITECTURE.md).
+ARCH_MODULE_THRESHOLD = 4
+# Headings inside the root README that count as an architecture overview when
+# followed by enough content under them.
+_ARCH_HEADING_RE = re.compile(
+    r"^(#+)\s*(architecture|structure|project layout|layout|how it works|"
+    r"design|overview|module(?:s)? map|file map|project structure)\b.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_ARCH_README_MIN_CHARS = 200  # content under the heading needed to count
+_ARCH_DOCS_MIN_CHARS = 500    # content needed in a docs/*.md to count
+
+
+def _has_arch_doc(root: Path, rootfiles: set[str], files: list[str]) -> bool:
+    """Any of: an ARCHITECTURE.md at root, a docs/ dir with substantive content,
+    or a root README with an Architecture/Structure section ≥ _ARCH_README_MIN_CHARS.
+    """
+    # 1) ARCHITECTURE.md at root (case-insensitive).
+    if any(rf in rootfiles for rf in ("architecture.md", "architecture.markdown")):
+        return True
+    # 2) docs/ directory with a non-trivial markdown file.
+    for f in files:
+        low = f.lower()
+        if not (low.startswith("docs/") or "/docs/" in low):
+            continue
+        if not low.endswith((".md", ".markdown", ".rst", ".txt")):
+            continue
+        try:
+            if len((root / f).read_text(encoding="utf-8", errors="ignore")) >= _ARCH_DOCS_MIN_CHARS:
+                return True
+        except Exception:
+            continue
+    # 3) Root README has an Architecture/Structure section with real content.
+    readme = next((rf for rf in rootfiles
+                   if rf in ("readme.md", "readme.markdown", "readme.rst", "readme.txt")), None)
+    if not readme:
+        return False
+    text = _rt(root, readme)
+    m = _ARCH_HEADING_RE.search(text)
+    if not m:
+        return False
+    start = m.end()
+    # Content under the heading runs until the next heading of the same-or-shallower depth.
+    depth = len(m.group(1))
+    after = text[start:]
+    next_h = re.search(rf"^#{{1,{depth}}}\s", after, re.MULTILINE)
+    section = after[: next_h.start()] if next_h else after
+    return len(section.strip()) >= _ARCH_README_MIN_CHARS
+
 
 def _rt(root: Path, rel: str) -> str:
     try:
@@ -104,7 +155,7 @@ def _mcp_resolves(root: Path, files: list[str]) -> tuple[bool, str]:
     return True, ""
 
 
-def detect_setup(root: Path, files: list[str], mcp_present: bool):
+def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total: int = 0):
     low = [f.lower() for f in files]
     lowset = set(low)
     rootfiles = {f for f in low if "/" not in f}
@@ -179,6 +230,14 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool):
         ("license", has_license, 1, True, "LICENSE",
          "Add a LICENSE file"),
     ]
+    # A3: architecture/overview doc — only *expected* on multi-module repos so we
+    # don't nag small utilities. Below the threshold it's informational (omitted
+    # from the checklist entirely; presence elsewhere is fine).
+    arch_applicable = modules_total >= ARCH_MODULE_THRESHOLD
+    has_arch = _has_arch_doc(root, rootfiles, files) if arch_applicable else False
+    checks.append(("architecture_doc", has_arch, 2, arch_applicable, "architecture overview",
+                   f"No architecture overview for a {modules_total}-module repo — add "
+                   "ARCHITECTURE.md, a docs/ overview, or a Structure section in the README"))
     if mcp_present:
         ok, detail = _mcp_resolves(root, files)
         checks.append(("mcp_resolves", ok, 2, True, "MCP config resolves",

@@ -12,7 +12,9 @@ def scan(root: Path, repo_label: str | None = None) -> dict:
     files, is_git = mod.list_files(root)
     modules, agent_files = mod.detect_modules(root, files, is_git)
     findings, metrics = detectors.run_detectors(root, files, modules, agent_files, is_git)
-    setup_findings, setup_metrics = setupcheck.detect_setup(root, files, metrics["mcp_present"])
+    setup_findings, setup_metrics = setupcheck.detect_setup(
+        root, files, metrics["mcp_present"], modules_total=metrics["modules_total"]
+    )
     findings = findings + setup_findings
     metrics.update(setup_metrics)
     score, grade, categories = scoring.score_scan(metrics)

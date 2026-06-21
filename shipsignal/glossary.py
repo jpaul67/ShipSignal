@@ -84,10 +84,15 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "category (20 pts) but does not cap the grade.",
     },
     "agent_instructions": {
-        "short": "An agent guide (CLAUDE.md / AGENTS.md / .cursor/rules) telling tools "
-                 "how to build, test, and behave here.",
-        "tip": "Root or nested agent-instruction files, size-scaled: optional on very "
-               "small repos, expected on larger ones. 15 pts.",
+        "short": "An agent guide (CLAUDE.md / AGENTS.md / .cursor/rules / "
+                 ".clinerules / copilot-instructions) that tells tools how to build, "
+                 "test, and orient themselves.",
+        "tip": "Root or nested agent files, size-scaled (optional on very small repos) "
+               "and depth-graded: full credit when the file names build/test commands "
+               "AND points at structure; partial credit when commands or structure are "
+               "missing; minimum credit for a thin shell. Heuristic — looks for tokens "
+               "like 'pytest', 'npm test', a ## Commands section, and links to other "
+               "docs. 15 pts.",
     },
     "module_coverage": {
         "short": "Each detected module/package has a README, so an agent can orient "
@@ -97,9 +102,11 @@ GLOSSARY: dict[str, dict[str, str]] = {
     },
     "setup_tooling": {
         "short": "The practical files an agent needs to actually work: discoverable "
-                 "test command, CI, deps, lint/type config, conventions, license.",
+                 "test command, CI, deps, lint/type config, conventions, license, "
+                 "and (on multi-module repos) an architecture overview.",
         "tip": "Weighted checklist: test command, CI, dependency manifest + lockfile, "
-               "lint/format/type config, .editorconfig, CONTRIBUTING, LICENSE, and MCP "
+               "lint/format/type config, .editorconfig, CONTRIBUTING, LICENSE, "
+               "architecture doc (expected on repos with ≥4 modules), and MCP "
                "path-resolution when present. 20 pts.",
     },
     "doc_integrity": {
