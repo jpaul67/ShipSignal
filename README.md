@@ -62,6 +62,8 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates.
 
+Add `--snapshot` to any command to persist a small (<8KB) JSON record under `.shipsignal/snapshots/YYYY-MM-DD-<sha>.json`. Gitignored by default; remove the `.shipsignal/` line from `.gitignore` to commit your audit history. The forthcoming `shipsignal trend` command will diff snapshots to show score / breadth / fixes movement over time.
+
 ## Project layout
 
 - [shipsignal/](shipsignal/README.md) — the package (module map inside)

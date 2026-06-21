@@ -9,9 +9,33 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import gitinfo, impact, report, scanner
+from . import gitinfo, impact, report, scanner, snapshot
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
+
+# Sentinel value for argparse: --snapshot with no PATH arg uses the default
+# location; --snapshot PATH uses the given file; flag absent => no snapshot.
+_SNAPSHOT_DEFAULT = "__SHIPSIGNAL_SNAPSHOT_DEFAULT__"
+
+
+def _maybe_write_snapshot(args_value, *, readiness=None, impact_result=None,
+                          repo_label: str | None = None, root: Path | None = None) -> None:
+    """Translate the --snapshot CLI value into an actual file write, if requested."""
+    if args_value is None:
+        return
+    snap = snapshot.build_snapshot(
+        readiness=readiness, impact=impact_result,
+        repo_label=repo_label, root=root,
+    )
+    if args_value == _SNAPSHOT_DEFAULT:
+        assert root is not None
+        out_path = snapshot.default_snapshot_path(
+            root, snap.get("commit_sha"), snap.get("commit_date"),
+        )
+    else:
+        out_path = Path(args_value)
+    snapshot.write_snapshot(snap, out_path)
+    print(f"  wrote snapshot {out_path}")
 
 
 def _looks_like_url(s: str) -> bool:
@@ -67,6 +91,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
                 print(f"  wrote {path}")
+        _maybe_write_snapshot(args.snapshot, readiness=result,
+                              repo_label=label, root=root)
         if args.fail_under is not None and result["score"] < args.fail_under:
             print(f"  FAIL: score {result['score']} < --fail-under {args.fail_under}",
                   file=sys.stderr)
@@ -111,6 +137,8 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
                 print(f"  wrote {path}")
+        _maybe_write_snapshot(args.snapshot, impact_result=result,
+                              repo_label=label, root=root)
         return 0
     finally:
         if tmp:
@@ -151,6 +179,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
                 print(f"  wrote {path}")
+        _maybe_write_snapshot(args.snapshot, readiness=readiness_result,
+                              impact_result=impact_result, repo_label=label, root=root)
         return 0
     finally:
         if tmp:
@@ -176,6 +206,10 @@ def main(argv: list[str] | None = None) -> int:
     scan_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
     scan_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
     scan_p.add_argument("--badge", metavar="FILE", help="write a readiness badge SVG to FILE")
+    scan_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
+                        metavar="PATH",
+                        help="persist a small JSON snapshot for `shipsignal trend` "
+                             "(default location: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
     scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
                         help="exit non-zero if the score is below N")
 
@@ -190,6 +224,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="skip the readiness scan (the Readiness number shows n/a)")
     impact_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
+    impact_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
+                          metavar="PATH",
+                          help="persist a small JSON snapshot for `shipsignal trend` "
+                               "(default: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
 
     report_p = sub.add_parser("report", help="unified audit: both lenses, one deliverable")
     report_p.add_argument("target", help="local path, https git URL, or owner/repo")
@@ -200,6 +238,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     report_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
+    report_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
+                          metavar="PATH",
+                          help="persist a small JSON snapshot for `shipsignal trend` "
+                               "(default: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
 
     args = parser.parse_args(argv)
     if args.cmd == "scan":
