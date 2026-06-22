@@ -42,6 +42,27 @@ def _sparkline(values: list[float], max_val: float | None = None) -> str:
     return "".join(_SPARK[min(7, int(v / mx * 7))] for v in values)
 
 
+def _fix_path(f: dict) -> str:
+    """Path with an optional ``:line`` suffix (#5)."""
+    p = f.get("path", "")
+    return f"{p}:{f['line']}" if f.get("line") else p
+
+
+def _fix_meta(f: dict) -> str:
+    """Compact ' · ≈+3 pts · moderate' suffix (#1). Informational findings say
+    so instead of a points number, so a 0 doesn't read as 'worthless'."""
+    bits = []
+    if f.get("informational"):
+        bits.append("informational")
+    else:
+        pts = f.get("points_at_stake", 0.0)
+        if pts:
+            bits.append(f"≈+{pts:g} pts")
+    if f.get("effort"):
+        bits.append(f["effort"])
+    return ("  · " + " · ".join(bits)) if bits else ""
+
+
 def render(result: dict) -> str:
     out = []
     out.append("")
@@ -60,9 +81,9 @@ def render(result: dict) -> str:
     warns = [f for f in findings if f["severity"] != "info"]
     if warns:
         out.append("")
-        out.append(f"  Top fixes ({len(warns)} issues):")
+        out.append(f"  Top fixes ({len(warns)} issues, highest payoff first):")
         for f in warns[:8]:
-            out.append(f"   • [{f['severity']}] {f['path']}: {f['evidence']}")
+            out.append(f"   • {_fix_path(f)}: {f['evidence']}{_fix_meta(f)}")
             out.append(f"       → {f['fix']}")
         if len(warns) > 8:
             out.append(f"   … and {len(warns) - 8} more")
@@ -87,11 +108,12 @@ def render_markdown(result: dict) -> str:
     warns = [f for f in result["findings"] if f["severity"] != "info"]
     infos = [f for f in result["findings"] if f["severity"] == "info"]
     if warns:
-        L += ["", "## Fixes", ""]
-        L += [f"- **{f['path']}** — {f['evidence']}  \n  → {f['fix']}" for f in warns]
+        L += ["", "## Fixes _(highest payoff first)_", ""]
+        L += [f"- **{_fix_path(f)}** — {f['evidence']}{_fix_meta(f)}  \n  → {f['fix']}"
+              for f in warns]
     if infos:
         L += ["", "## Optional", ""]
-        L += [f"- {f['path']} — {f['evidence']}" for f in infos]
+        L += [f"- {_fix_path(f)} — {f['evidence']}{_fix_meta(f)}" for f in infos]
     L += ["", f"<sub>shipsignal v{__version__} · {result['scanned_at']}</sub>", ""]
     return "\n".join(L)
 
@@ -109,7 +131,8 @@ def render_html(result: dict) -> str:
                      f'<div class="num">{_esc(val)}</div></div>')
     warns = [f for f in result["findings"] if f["severity"] != "info"]
     fixes = "".join(
-        f'<li><b>{_esc(f["path"])}</b> — {_esc(f["evidence"])}'
+        f'<li><b>{_esc(_fix_path(f))}</b> — {_esc(f["evidence"])}'
+        f'{_esc(_fix_meta(f))}'
         f'<br><span class="fix">→ {_esc(f["fix"])}</span></li>' for f in warns
     ) or "<li>None — nicely set up. ✓</li>"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -650,9 +673,9 @@ def render_unified(impact_result: dict, readiness_result: dict) -> str:
     warns, extra = _readiness_fix_lines(readiness_result)
     L.append("")
     if warns:
-        L.append(f"  Top Readiness fixes ({len(warns) + extra} total):")
+        L.append(f"  Top Readiness fixes ({len(warns) + extra} total, highest payoff first):")
         for w in warns:
-            L.append(f"   • [{w['severity']}] {w['path']}: {w['evidence']}")
+            L.append(f"   • {_fix_path(w)}: {w['evidence']}{_fix_meta(w)}")
             L.append(f"       → {w['fix']}")
         if extra:
             L.append(f"   … and {extra} more")
@@ -675,10 +698,10 @@ def render_unified_markdown(impact_result: dict, readiness_result: dict) -> str:
     L.append("")
     warns, extra = _readiness_fix_lines(readiness_result)
     if warns:
-        L.append(f"### Top Readiness fixes ({len(warns) + extra} total)")
+        L.append(f"### Top Readiness fixes ({len(warns) + extra} total, highest payoff first)")
         L.append("")
         for w in warns:
-            L.append(f"- **{w['path']}** — {w['evidence']}  \n  → {w['fix']}")
+            L.append(f"- **{_fix_path(w)}** — {w['evidence']}{_fix_meta(w)}  \n  → {w['fix']}")
         if extra:
             L.append(f"\n*…and {extra} more in the JSON.*")
     else:
@@ -706,11 +729,12 @@ def render_unified_html(impact_result: dict, readiness_result: dict) -> str:
     warns, extra = _readiness_fix_lines(readiness_result)
     if warns:
         fixes = "".join(
-            f"<li><b>{_esc(w['path'])}</b> — {_esc(w['evidence'])}"
+            f"<li><b>{_esc(_fix_path(w))}</b> — {_esc(w['evidence'])}{_esc(_fix_meta(w))}"
             f"<br><span class='fix'>→ {_esc(w['fix'])}</span></li>" for w in warns
         )
         more = f"<p class='hint'>…and {extra} more in the JSON.</p>" if extra else ""
-        fixes_block = f"<h2>Top Readiness fixes ({len(warns) + extra} total)</h2><ul>{fixes}</ul>{more}"
+        fixes_block = (f"<h2>Top Readiness fixes ({len(warns) + extra} total, "
+                       f"highest payoff first)</h2><ul>{fixes}</ul>{more}")
     else:
         fixes_block = "<h2>Readiness fixes</h2><p>None — the repo is well set up for agents.</p>"
 

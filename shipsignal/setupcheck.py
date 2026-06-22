@@ -294,10 +294,15 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total:
             "path": ".",
             "evidence": f"Missing {label}",
             "fix": fix,
+            # #1: carry the check id + weight so score_impact can value the fix
+            # (resolving it adds `weight` to the numerator over `total_w`).
+            "resolution": {"setup_check": cid, "setup_weight": weight,
+                           "setup_total_weight": total_w},
         })
 
     metrics = {
         "setup_score_frac": got_w / total_w,
+        "setup_total_weight": total_w,
         "setup_present": [c[0] for c in applicable if c[1]],
         "setup_missing": [c[0] for c in applicable if not c[1]],
     }

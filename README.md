@@ -62,6 +62,8 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates.
 
+Readiness fixes are **ranked by payoff** — each carries an `≈+N pts` estimate (computed by re-scoring as if it were resolved, so the number always matches the model), an effort tag (`quick` / `moderate`), and a `file:line` location where one applies. Desync flags that don't move the score are labelled `informational` rather than padded with a number.
+
 Add `--snapshot` to any command to persist a small (<8KB) JSON record under `.shipsignal/snapshots/YYYY-MM-DD-<sha>.json`. Gitignored by default; remove the `.shipsignal/` line from `.gitignore` to commit your audit history. Then:
 
 ```bash

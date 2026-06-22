@@ -142,9 +142,51 @@ def _best_usefulness(grades: list) -> dict | None:
     return max(grades, key=key)
 
 
-def _finding(detector, severity, path, evidence, fix):
-    return {"detector": detector, "severity": severity, "path": path,
-            "evidence": evidence, "fix": fix}
+def _finding(detector, severity, path, evidence, fix, *, line=None, resolution=None):
+    """A finding. ``line`` (#5) cites a location for link/path fixes; ``resolution``
+    (#1) carries per-finding hints score_impact needs to value the fix (e.g. a
+    setup check's weight, a doc's drift grade). Both optional; snapshots still
+    fingerprint on (detector, path, severity) so extra fields are harmless."""
+    f = {"detector": detector, "severity": severity, "path": path,
+         "evidence": evidence, "fix": fix}
+    if line is not None:
+        f["line"] = line
+    if resolution is not None:
+        f["resolution"] = resolution
+    return f
+
+
+# Which readiness area each detector belongs to — drives the fixed grouping
+# order in the renderer (#4). Fixed order: Agent context → Module docs →
+# Setup → Integrity → Freshness.
+FINDING_AREA = {
+    "entry_point": "Agent context",
+    "agent_instructions": "Agent context",
+    "module_readme": "Module docs",
+    "setup": "Setup",
+    "broken_link": "Integrity",
+    "doc_drift": "Freshness",
+    "doc_ref_missing": "Freshness",
+    "doc_predates_modules": "Freshness",
+    "doc_written_once": "Freshness",
+}
+AREA_ORDER = ["Agent context", "Module docs", "Setup", "Integrity", "Freshness"]
+
+# Heuristic effort tag per detector (#1). Honest tags, not fabricated minutes:
+#   quick       — add/repair a single file
+#   moderate    — write a focused doc or config (commands section, CI, README)
+#   substantial — multi-file work (only used when count is high; see enrich)
+FINDING_EFFORT = {
+    "entry_point": "moderate",
+    "agent_instructions": "moderate",
+    "module_readme": "moderate",
+    "setup": "quick",
+    "broken_link": "quick",
+    "doc_drift": "moderate",
+    "doc_ref_missing": "quick",
+    "doc_predates_modules": "moderate",
+    "doc_written_once": "moderate",
+}
 
 
 def _code_count(files: list[str]) -> int:
@@ -378,7 +420,7 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
             fix = f"Add {m.path}/README.md orienting an agent to this subtree"
         findings.append(_finding("module_readme", "warn", m.path, evidence, fix))
 
-    # 4. broken links in markdown
+    # 4. broken links in markdown — line-aware (#5) so the fix cites README.md:42.
     broken = 0
     links_checked = 0
     for f in files:
@@ -386,30 +428,32 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
             continue
         text = (root / f).read_text(encoding="utf-8", errors="ignore")
         base = root if dir_of(f) == "." else (root / dir_of(f))
-        for raw in LINK_RE.findall(text):
-            if _skip_link(raw):
-                continue
-            tgt = raw.strip().split("#", 1)[0].strip()
-            if not tgt or not _PATHLIKE.match(tgt):
-                continue
-            abs_t = base / tgt
-            try:
-                inside = abs_t.resolve().is_relative_to(root.resolve())
-            except Exception:
-                inside = False
-            if not inside:
-                continue  # link escapes the repo — not checkable
-            if abs_t.exists():
-                links_checked += 1
-                continue
-            if ext_of(tgt) in _FILE_EXTS:
-                links_checked += 1
-                broken += 1
-                findings.append(_finding(
-                    "broken_link", "warn", f,
-                    f"Link to '{raw}' does not resolve",
-                    f"Fix or remove the link in {f}"))
-            # extensionless / unknown-ext unresolved → likely a doc-site route or anchor; skip
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for raw in LINK_RE.findall(line):
+                if _skip_link(raw):
+                    continue
+                tgt = raw.strip().split("#", 1)[0].strip()
+                if not tgt or not _PATHLIKE.match(tgt):
+                    continue
+                abs_t = base / tgt
+                try:
+                    inside = abs_t.resolve().is_relative_to(root.resolve())
+                except Exception:
+                    inside = False
+                if not inside:
+                    continue  # link escapes the repo — not checkable
+                if abs_t.exists():
+                    links_checked += 1
+                    continue
+                if ext_of(tgt) in _FILE_EXTS:
+                    links_checked += 1
+                    broken += 1
+                    findings.append(_finding(
+                        "broken_link", "warn", f,
+                        f"Link to '{raw}' does not resolve",
+                        f"Fix or remove the link in {f}",
+                        line=lineno))
+                # extensionless / unknown-ext unresolved → doc-site route or anchor; skip
 
     # 5. doc freshness / drift (needs git history) — B4 graded drift.
     # Per-doc fresh_score in [0, 1]; category aggregates with mean.
@@ -441,7 +485,8 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                     "doc_drift", sev, doc,
                     f"Code in '{m.path}' changed after this doc — {lag_label} "
                     f"(code {m.last_code_commit} vs doc {ddate})",
-                    "Review and refresh the doc"))
+                    "Review and refresh the doc",
+                    resolution={"drift_grade": grade}))
 
     # --- B1/B2/B3: doc tech-debt depth (findings-only; B4 already moved score) ---
     # These flag *demonstrable desync*, never mere age. All gated on git history.
@@ -455,23 +500,27 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                 text = (root / doc).read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 continue
-            for ref in _ref_paths(text):
-                # Resolve relative to the doc's directory; skip refs that escape
-                # the repo (we already skip absolute/url tokens in _ref_paths).
-                base = root if dir_of(doc) == "." else (root / dir_of(doc))
-                target = base / ref.rstrip("/")
-                try:
-                    inside = target.resolve().is_relative_to(root.resolve())
-                except Exception:
-                    inside = False
-                if not inside:
-                    continue
-                if target.exists():
-                    continue
-                findings.append(_finding(
-                    "doc_ref_missing", "warn", doc,
-                    f"References `{ref}` which no longer exists",
-                    f"Fix or remove the `{ref}` reference in {basename(doc)}"))
+            base = root if dir_of(doc) == "." else (root / dir_of(doc))
+            seen_refs: set[str] = set()
+            for lineno, line in enumerate(text.splitlines(), 1):
+                for ref in _ref_paths(line):
+                    if ref in seen_refs:
+                        continue  # report each dead ref once, at its first line
+                    # Resolve relative to the doc's directory; skip refs that
+                    # escape the repo (url/absolute tokens already filtered).
+                    target = base / ref.rstrip("/")
+                    try:
+                        inside = target.resolve().is_relative_to(root.resolve())
+                    except Exception:
+                        inside = False
+                    if not inside or target.exists():
+                        continue
+                    seen_refs.add(ref)
+                    findings.append(_finding(
+                        "doc_ref_missing", "warn", doc,
+                        f"References `{ref}` which no longer exists",
+                        f"Fix or remove the `{ref}` reference in {basename(doc)}",
+                        line=lineno))
 
         # B2: agent files at root that predate modules added later. Honest signal
         # that the agent file has fallen behind the codebase.
