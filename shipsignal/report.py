@@ -4,6 +4,7 @@ from __future__ import annotations
 from html import escape as _esc
 
 from . import __version__, glossary
+from .detectors import AREA_ORDER
 
 GRADE_COLOR = {"A": "#4c1", "B": "#97ca00", "C": "#dfb317", "D": "#fe7d37", "F": "#e05d44"}
 
@@ -63,6 +64,108 @@ def _fix_meta(f: dict) -> str:
     return ("  · " + " · ".join(bits)) if bits else ""
 
 
+# --- #4 grouped + collapsed rendering helpers --------------------------------
+_COLLAPSE_THRESHOLD = 3  # collapse setup info findings when 3+ accumulate
+
+
+def _group_fixes(findings: list[dict], *, collapse_setup: bool = True) -> list[dict]:
+    """Group findings into ``[{area, items}]`` in the fixed AREA_ORDER. Each
+    ``items`` is a list of either real finding dicts or one collapsed bundle
+    of low-value setup info findings (so the list doesn't drown in 5 tiny
+    convention-file misses)."""
+    by_area: dict[str, list[dict]] = {a: [] for a in AREA_ORDER}
+    other: list[dict] = []
+    for f in findings:
+        area = f.get("area") or "Other"
+        (by_area.get(area, other)).append(f)
+
+    blocks: list[dict] = []
+    for area in AREA_ORDER:
+        bucket = by_area.get(area) or []
+        if not bucket:
+            continue
+        items: list = list(bucket)  # mix of finding-dicts + a collapsed bundle
+        if collapse_setup and area == "Setup":
+            info_items = [f for f in bucket if f.get("severity") == "info"]
+            if len(info_items) >= _COLLAPSE_THRESHOLD:
+                # Build the collapsed line: total points + a comma list of "label (+N)"
+                labels = []
+                for f in info_items:
+                    # Evidence is "Missing <label>"; trim the prefix to label.
+                    ev = f.get("evidence") or ""
+                    label = ev.split("Missing ", 1)[1] if ev.startswith("Missing ") else ev
+                    pts = f.get("points_at_stake", 0.0)
+                    suffix = f" (+{pts:g})" if pts else ""
+                    labels.append(label + suffix)
+                bundled = {
+                    "_collapsed": True,
+                    "count": len(info_items),
+                    "evidence": f"Missing {len(info_items)} convention items: "
+                                + ", ".join(labels),
+                    "fix": "Drop these in — each is small but they add up to "
+                           f"≈+{sum(f.get('points_at_stake', 0) for f in info_items):g} pts",
+                    "effort": "quick",
+                }
+                # Keep warn-level setup items separate (they're load-bearing).
+                items = [f for f in bucket if f.get("severity") != "info"] + [bundled]
+        blocks.append({"area": area, "items": items})
+    if other:
+        blocks.append({"area": "Other", "items": other})
+    return blocks
+
+
+def _top_n_payoff_ids(findings: list[dict], n: int = 3) -> set[int]:
+    """Return ``id(f)`` for the top-N findings by points (warn-class, not
+    informational). Used to gate snippet display in the CLI."""
+    eligible = [f for f in findings if not f.get("informational")
+                and f.get("severity") == "warn"]
+    eligible.sort(key=lambda f: -f.get("points_at_stake", 0.0))
+    return {id(f) for f in eligible[:n]}
+
+
+def _indent(text: str, prefix: str) -> str:
+    return "\n".join(prefix + ln if ln else ln for ln in text.splitlines())
+
+
+def _renorm_caveat() -> str:
+    return ("≈ marks each fix's marginal payoff (resolving it alone). Renormalization "
+            "means totals aren't additive — fixing several won't equal the sum.")
+
+
+def _render_grouped_fixes_html(findings: list[dict]) -> str:
+    """The grouped+collapsed fixes block — used by both the readiness-only
+    and unified HTML renderers (so they don't drift). Snippets always shown
+    here, in a collapsible <details>, per the spec."""
+    blocks_html: list[str] = []
+    for block in _group_fixes(findings):
+        shown = [it for it in block["items"]
+                 if it.get("_collapsed") or it.get("severity") == "warn"]
+        if not shown:
+            continue
+        items_html: list[str] = []
+        for it in shown:
+            if it.get("_collapsed"):
+                items_html.append(
+                    f"<li>{_esc(it['evidence'])} — <i>quick</i><br>"
+                    f"<span class='fix'>→ {_esc(it['fix'])}</span></li>"
+                )
+                continue
+            base = (f"<li><b>{_esc(_fix_path(it))}</b> — {_esc(it['evidence'])}"
+                    f"{_esc(_fix_meta(it))}<br>"
+                    f"<span class='fix'>→ {_esc(it['fix'])}</span>")
+            if it.get("snippet"):
+                base += (
+                    "<details class='snippet'><summary>Starter — copy + fill in placeholders</summary>"
+                    f"<pre>{_esc(it['snippet'])}</pre></details>"
+                )
+            items_html.append(base + "</li>")
+        blocks_html.append(
+            f"<h3 class='area'>{_esc(block['area'])}</h3>"
+            f"<ul>{''.join(items_html)}</ul>"
+        )
+    return "\n".join(blocks_html) or "<p>None — nicely set up. ✓</p>"
+
+
 def render(result: dict) -> str:
     out = []
     out.append("")
@@ -79,14 +182,32 @@ def render(result: dict) -> str:
 
     findings = result.get("findings", [])
     warns = [f for f in findings if f["severity"] != "info"]
-    if warns:
+    if warns or any(f.get("severity") == "info" and f.get("detector") == "setup"
+                    for f in findings):
         out.append("")
-        out.append(f"  Top fixes ({len(warns)} issues, highest payoff first):")
-        for f in warns[:8]:
-            out.append(f"   • {_fix_path(f)}: {f['evidence']}{_fix_meta(f)}")
-            out.append(f"       → {f['fix']}")
-        if len(warns) > 8:
-            out.append(f"   … and {len(warns) - 8} more")
+        out.append(f"  Top fixes ({len(warns)} issues, grouped by area, "
+                   "highest payoff first):")
+        snippet_ids = _top_n_payoff_ids(findings, n=3)
+        blocks = _group_fixes(findings)
+        for block in blocks:
+            shown = [it for it in block["items"]
+                     if it.get("_collapsed") or it.get("severity") == "warn"]
+            if not shown:
+                continue
+            out.append("")
+            out.append(f"  {block['area']}")
+            for it in shown:
+                if it.get("_collapsed"):
+                    out.append(f"   • {it['evidence']}  · quick")
+                    out.append(f"       → {it['fix']}")
+                    continue
+                out.append(f"   • {_fix_path(it)}: {it['evidence']}{_fix_meta(it)}")
+                out.append(f"       → {it['fix']}")
+                if id(it) in snippet_ids and it.get("snippet"):
+                    out.append("       starter (copy + fill in the placeholders):")
+                    out.append(_indent(it["snippet"], "         "))
+        out.append("")
+        out.append(f"  {_renorm_caveat()}")
     out.append("")
     return "\n".join(out)
 
@@ -105,16 +226,29 @@ def render_markdown(result: dict) -> str:
          "| Category | Score |", "|---|---|"]
     for cid, val, _pct in _cat_rows(result):
         L.append(f"| {cid} | {val} |")
-    warns = [f for f in result["findings"] if f["severity"] != "info"]
-    infos = [f for f in result["findings"] if f["severity"] == "info"]
-    if warns:
-        L += ["", "## Fixes _(highest payoff first)_", ""]
-        L += [f"- **{_fix_path(f)}** — {f['evidence']}{_fix_meta(f)}  \n  → {f['fix']}"
-              for f in warns]
-    if infos:
-        L += ["", "## Optional", ""]
-        L += [f"- {_fix_path(f)} — {f['evidence']}{_fix_meta(f)}" for f in infos]
-    L += ["", f"<sub>shipsignal v{__version__} · {result['scanned_at']}</sub>", ""]
+    findings = result["findings"]
+    warns = [f for f in findings if f["severity"] != "info"]
+    if warns or findings:
+        L += ["", "## Fixes _(grouped by area, highest payoff first)_", ""]
+        for block in _group_fixes(findings):
+            shown = [it for it in block["items"]
+                     if it.get("_collapsed") or it.get("severity") == "warn"]
+            if not shown:
+                continue
+            L += [f"### {block['area']}", ""]
+            for it in shown:
+                if it.get("_collapsed"):
+                    L.append(f"- {it['evidence']} — _quick_  \n  → {it['fix']}")
+                    continue
+                L.append(f"- **{_fix_path(it)}** — {it['evidence']}{_fix_meta(it)}  \n"
+                         f"  → {it['fix']}")
+                if it.get("snippet"):
+                    L += ["", "  <details><summary>Starter (copy + fill in the placeholders)</summary>",
+                          "", "  ```markdown", _indent(it["snippet"], "  "),
+                          "  ```", "  </details>", ""]
+            L.append("")
+        L += [f"_<sub>{_renorm_caveat()}</sub>_", ""]
+    L += [f"<sub>shipsignal v{__version__} · {result['scanned_at']}</sub>", ""]
     return "\n".join(L)
 
 
@@ -129,12 +263,10 @@ def render_html(result: dict) -> str:
             rows += (f'<div class="row"><div class="cat">{_esc(cid)}</div>'
                      f'<div class="bar"><span style="width:{pct:.0f}%"></span></div>'
                      f'<div class="num">{_esc(val)}</div></div>')
-    warns = [f for f in result["findings"] if f["severity"] != "info"]
-    fixes = "".join(
-        f'<li><b>{_esc(_fix_path(f))}</b> — {_esc(f["evidence"])}'
-        f'{_esc(_fix_meta(f))}'
-        f'<br><span class="fix">→ {_esc(f["fix"])}</span></li>' for f in warns
-    ) or "<li>None — nicely set up. ✓</li>"
+    findings = result["findings"]
+    warns = [f for f in findings if f["severity"] != "info"]
+    fixes_html = _render_grouped_fixes_html(findings) if (warns or findings) else \
+                 "<p>None — nicely set up. ✓</p>"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI readiness — {_esc(result['repo'])}</title><style>
 body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
@@ -146,13 +278,21 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .bar span{{display:block;height:100%;background:{color}}}
 .bar.na{{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}}
 .num{{width:74px;text-align:right;color:#333}}h2{{font-size:15px;margin-top:28px}}
-ul{{padding-left:18px}}li{{margin:8px 0}}.fix{{color:#666}}sub{{color:#aaa}}
+h3.area{{font-size:13px;margin:16px 0 4px;color:#4477dd;text-transform:uppercase;letter-spacing:.05em}}
+ul{{padding-left:18px}}li{{margin:8px 0}}.fix{{color:#666}}
+details.snippet{{margin-top:6px;font-size:12px}}
+details.snippet summary{{cursor:pointer;color:#4477dd}}
+details.snippet pre{{background:#fafafa;border:1px solid #eee;padding:10px;border-radius:4px;overflow-x:auto;white-space:pre-wrap}}
+.hint{{color:#666;font-size:12px}}
+sub{{color:#aaa}}
 </style></head><body>
 <h1>ShipSignal — AI readiness</h1><div class="sub">{_esc(result['repo'])}</div>
 <p><span class="score">{result['score']}</span><span class="slash">/100</span>
 <span class="grade">{_esc(result['grade'])}</span></p>
 {rows}
-<h2>Top fixes ({len(warns)})</h2><ul>{fixes}</ul>
+<h2>Top fixes ({len(warns)}, grouped by area, highest payoff first)</h2>
+{fixes_html}
+<p class="hint" style="margin-top:18px">{_esc(_renorm_caveat())}</p>
 <p><sub>shipsignal v{__version__} · {_esc(result['scanned_at'])}</sub></p>
 </body></html>"""
 
@@ -670,15 +810,32 @@ def render_unified(impact_result: dict, readiness_result: dict) -> str:
             L.append(f"   {c['id']:<20} {_bar(c['points'], c['max'])} {c['points']:g}/{c['max']:g}")
         else:
             L.append(f"   {c['id']:<20} {'·' * 16} {c['status']}")
-    warns, extra = _readiness_fix_lines(readiness_result)
+    findings = readiness_result.get("findings", [])
+    warns = [f for f in findings if f["severity"] != "info"]
     L.append("")
     if warns:
-        L.append(f"  Top Readiness fixes ({len(warns) + extra} total, highest payoff first):")
-        for w in warns:
-            L.append(f"   • {_fix_path(w)}: {w['evidence']}{_fix_meta(w)}")
-            L.append(f"       → {w['fix']}")
-        if extra:
-            L.append(f"   … and {extra} more")
+        L.append(f"  Top Readiness fixes ({len(warns)} issues, grouped by area, "
+                 "highest payoff first):")
+        snippet_ids = _top_n_payoff_ids(findings, n=3)
+        for block in _group_fixes(findings):
+            shown = [it for it in block["items"]
+                     if it.get("_collapsed") or it.get("severity") == "warn"]
+            if not shown:
+                continue
+            L.append("")
+            L.append(f"  {block['area']}")
+            for it in shown:
+                if it.get("_collapsed"):
+                    L.append(f"   • {it['evidence']}  · quick")
+                    L.append(f"       → {it['fix']}")
+                    continue
+                L.append(f"   • {_fix_path(it)}: {it['evidence']}{_fix_meta(it)}")
+                L.append(f"       → {it['fix']}")
+                if id(it) in snippet_ids and it.get("snippet"):
+                    L.append("       starter (copy + fill in the placeholders):")
+                    L.append(_indent(it["snippet"], "         "))
+        L.append("")
+        L.append(f"  {_renorm_caveat()}")
     else:
         L.append("  Readiness: no warnings — well set up.")
     L.append("")
@@ -698,12 +855,28 @@ def render_unified_markdown(impact_result: dict, readiness_result: dict) -> str:
     L.append("")
     warns, extra = _readiness_fix_lines(readiness_result)
     if warns:
-        L.append(f"### Top Readiness fixes ({len(warns) + extra} total, highest payoff first)")
+        findings = readiness_result.get("findings", [])
+        L.append(f"### Top Readiness fixes ({len(warns)} total, grouped by area, "
+                 "highest payoff first)")
         L.append("")
-        for w in warns:
-            L.append(f"- **{_fix_path(w)}** — {w['evidence']}{_fix_meta(w)}  \n  → {w['fix']}")
-        if extra:
-            L.append(f"\n*…and {extra} more in the JSON.*")
+        for block in _group_fixes(findings):
+            shown = [it for it in block["items"]
+                     if it.get("_collapsed") or it.get("severity") == "warn"]
+            if not shown:
+                continue
+            L += [f"**{block['area']}**", ""]
+            for it in shown:
+                if it.get("_collapsed"):
+                    L.append(f"- {it['evidence']} — _quick_  \n  → {it['fix']}")
+                    continue
+                L.append(f"- **{_fix_path(it)}** — {it['evidence']}{_fix_meta(it)}  \n"
+                         f"  → {it['fix']}")
+                if it.get("snippet"):
+                    L += ["", "  <details><summary>Starter — copy + fill in placeholders</summary>",
+                          "", "  ```markdown", _indent(it["snippet"], "  "),
+                          "  ```", "  </details>", ""]
+            L.append("")
+        L.append(f"_<sub>{_renorm_caveat()}</sub>_")
     else:
         L.append("### Readiness")
         L.append("")
@@ -726,15 +899,14 @@ def render_unified_html(impact_result: dict, readiness_result: dict) -> str:
             cat_rows += (f"<div class='row'><div class='cat'>{_tip(cid, cid)}</div>"
                          f"<div class='bar'><span style='width:{pct:.0f}%'></span></div>"
                          f"<div class='num'>{_esc(val)}</div></div>")
-    warns, extra = _readiness_fix_lines(readiness_result)
+    findings = readiness_result.get("findings", [])
+    warns = [f for f in findings if f["severity"] != "info"]
     if warns:
-        fixes = "".join(
-            f"<li><b>{_esc(_fix_path(w))}</b> — {_esc(w['evidence'])}{_esc(_fix_meta(w))}"
-            f"<br><span class='fix'>→ {_esc(w['fix'])}</span></li>" for w in warns
-        )
-        more = f"<p class='hint'>…and {extra} more in the JSON.</p>" if extra else ""
-        fixes_block = (f"<h2>Top Readiness fixes ({len(warns) + extra} total, "
-                       f"highest payoff first)</h2><ul>{fixes}</ul>{more}")
+        body = _render_grouped_fixes_html(findings)
+        fixes_block = (f"<h2>Top Readiness fixes ({len(warns)} issues, "
+                       f"grouped by area, highest payoff first)</h2>{body}"
+                       f"<p class='hint' style='margin-top:14px'>"
+                       f"{_esc(_renorm_caveat())}</p>")
     else:
         fixes_block = "<h2>Readiness fixes</h2><p>None — the repo is well set up for agents.</p>"
 

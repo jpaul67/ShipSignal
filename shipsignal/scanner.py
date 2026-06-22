@@ -5,22 +5,57 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import detectors, gitinfo, score_impact, scoring, setupcheck
+from . import detectors, gitinfo, score_impact, scoring, setupcheck, snippets
 from . import modules as mod
 
 
-def _enrich_findings(findings: list[dict], metrics: dict) -> list[dict]:
-    """Attach actionability metadata (#1, #4) to each finding, then order the
-    list by payoff so the most valuable fixes float to the top.
+def _detected_cmds_clause(metrics: dict) -> str:
+    """Compose a 'we detected `npm test` and `npm run build`' clause when the
+    setup pass found concrete commands. Empty string when we have no facts —
+    we never fabricate (#2 honesty rule: cross-detector facts must be real)."""
+    t = metrics.get("detected_test_cmd")
+    b = metrics.get("detected_build_cmd")
+    if not t and not b:
+        return ""
+    parts = []
+    if t:
+        parts.append(f"`{t}`")
+    if b:
+        parts.append(f"`{b}`")
+    joined = " and ".join(parts)
+    return f"we detected {joined} — name {'them' if len(parts) > 1 else 'it'} in the file"
+
+
+def _specialize_fix(finding: dict, metrics: dict) -> None:
+    """Idea #2: rewrite the generic ``fix`` text using cross-detector facts.
+    Mutates in place. No-op when no concrete fact is available — generic text
+    is still better than fabrication."""
+    det = finding.get("detector")
+    if det == "agent_instructions":
+        clause = _detected_cmds_clause(metrics)
+        if clause:
+            finding["fix"] = f"{finding['fix']} ({clause})"
+    elif det == "entry_point":
+        clause = _detected_cmds_clause(metrics)
+        if clause:
+            finding["fix"] = f"{finding['fix']} ({clause})"
+
+
+def _enrich_findings(findings: list[dict], metrics: dict,
+                     modules: list | None = None) -> list[dict]:
+    """Attach actionability metadata (#1, #2, #4) to each finding, then order
+    the list by payoff so the most valuable fixes float to the top.
 
     Runs after scoring, with full metrics in hand — the one place that knows
     everything both detector passes found. ``points_at_stake`` is computed by
     re-scoring (see score_impact), so the displayed payoff always matches the
-    real model.
+    real model. ``_specialize_fix`` rewrites generic action text with the
+    concrete commands the setup pass detected (#2).
     """
     # Setup checks vary in effort: dropping in a LICENSE / .editorconfig is
     # quick; standing up CI or a test command is real work.
-    _SETUP_MODERATE = {"ci_config", "test_command", "type_config", "lint_config"}
+    _SETUP_MODERATE = {"ci_config", "test_command", "type_config", "lint_config",
+                       "architecture_doc", "dependency_manifest", "mcp_resolves"}
     for f in findings:
         det = f.get("detector")
         res = f.get("resolution") or {}
@@ -32,6 +67,11 @@ def _enrich_findings(findings: list[dict], metrics: dict) -> list[dict]:
                            else "quick")
         else:
             f["effort"] = detectors.FINDING_EFFORT.get(det, "moderate")
+        _specialize_fix(f, metrics)  # #2 cross-detector specificity
+        snippet = snippets.snippet_for(f, metrics,
+                                        [m.__dict__ for m in (modules or [])])
+        if snippet:
+            f["snippet"] = snippet
         # Strip the internal resolution hint — it's scaffolding for scoring,
         # not user-facing, and keeps the snapshot/JSON output clean.
         f.pop("resolution", None)
@@ -57,7 +97,7 @@ def scan(root: Path, repo_label: str | None = None) -> dict:
     findings = findings + setup_findings
     metrics.update(setup_metrics)
     score, grade, categories = scoring.score_scan(metrics)
-    findings = _enrich_findings(findings, metrics)
+    findings = _enrich_findings(findings, metrics, modules)
     return {
         "schema_version": "0.1",
         "repo": repo_label or root.name,

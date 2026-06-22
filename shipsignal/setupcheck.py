@@ -201,24 +201,58 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total:
         or _file_count({".py"}) >= LANG_PRESENCE_FLOOR
     )
 
-    # Discoverable test command
+    # Discoverable test command — and capture the resolved string + ecosystem
+    # so the readiness fix list can name the actual command instead of saying
+    # "add the build/test invocations agents need" generically (#2).
     test_cmd = False
+    detected_test_cmd: str | None = None
+    detected_build_cmd: str | None = None
+    ecosystem: str | None = None
     if "package.json" in rootfiles:
         try:
-            if json.loads(_rt(root, "package.json")).get("scripts", {}).get("test"):
+            scripts = json.loads(_rt(root, "package.json")).get("scripts", {}) or {}
+            if scripts.get("test"):
                 test_cmd = True
+                detected_test_cmd = "npm test"
+            if scripts.get("build"):
+                detected_build_cmd = "npm run build"
+            ecosystem = "npm"
         except Exception:
             pass
     if not test_cmd:
         if {"pytest.ini", "tox.ini"} & rootfiles or _pyproject_tool(root, rootfiles, "pytest"):
             test_cmd = True
-        elif "cargo.toml" in bn or "go.mod" in rootfiles:
+            detected_test_cmd = "pytest"
+            ecosystem = ecosystem or "python"
+        elif "cargo.toml" in bn:
             test_cmd = True
+            detected_test_cmd = "cargo test"
+            detected_build_cmd = "cargo build"
+            ecosystem = "cargo"
+        elif "go.mod" in rootfiles:
+            test_cmd = True
+            detected_test_cmd = "go test ./..."
+            detected_build_cmd = "go build"
+            ecosystem = "go"
         else:
             for mk in ("makefile", "justfile", "taskfile.yml"):
                 if mk in rootfiles and re.search(r"(?mi)^[ \t]*test\b[ \t]*:", _rt(root, mk)):
                     test_cmd = True
+                    detected_test_cmd = "make test"
+                    ecosystem = ecosystem or "make"
                     break
+
+    # Even when test_cmd is False, we may still know the stack — surface it so
+    # the no-test-command fix can suggest the right convention.
+    if ecosystem is None:
+        if "pyproject.toml" in rootfiles or has_py_files:
+            ecosystem = "python"
+        elif "package.json" in rootfiles:
+            ecosystem = "npm"
+        elif "cargo.toml" in bn:
+            ecosystem = "cargo"
+        elif "go.mod" in rootfiles:
+            ecosystem = "go"
 
     has_ci = (any(f.startswith(".github/workflows/") for f in low)
               or any(f.startswith(".circleci/") for f in low)
@@ -305,5 +339,11 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total:
         "setup_total_weight": total_w,
         "setup_present": [c[0] for c in applicable if c[1]],
         "setup_missing": [c[0] for c in applicable if not c[1]],
+        # #2 cross-detector facts — surfaced into the readiness fix list so
+        # agent_instructions can name the actual detected command instead of
+        # falling back to generic advice.
+        "detected_test_cmd": detected_test_cmd,
+        "detected_build_cmd": detected_build_cmd,
+        "ecosystem": ecosystem,
     }
     return findings, metrics
