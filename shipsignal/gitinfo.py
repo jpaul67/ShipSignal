@@ -111,6 +111,27 @@ def total_commit_count(root: Path) -> int:
         return 0
 
 
+def commits_since(root: Path, date: str) -> int:
+    """Non-merge commits authored on/after ``date`` (YYYY-MM-DD). 0 on a
+    non-git repo or invalid date.
+
+    Used by B3 (doc_written_once): the *honest* denominator is "commits that
+    landed AFTER the doc existed," not total repo churn. A 4-day-old file in
+    a 724-commit repo legitimately has zero post-introduction churn against it
+    — so it shouldn't flag as "never revised across 724 commits."
+    """
+    if not date:
+        return 0
+    out = _run(
+        ["git", "rev-list", "--count", "--no-merges", f"--since={date}", "HEAD"],
+        root,
+    )
+    try:
+        return int(out.strip()) if out and out.strip() else 0
+    except ValueError:
+        return 0
+
+
 def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
     """Clone a repo for scanning. Always full history (never ``--depth``: freshness,
     adoption detection, and the before/after delta all need the whole commit graph).

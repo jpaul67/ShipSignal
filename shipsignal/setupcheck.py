@@ -162,8 +162,44 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total:
     bn = {basename(f) for f in low}
     exts = {ext_of(f) for f in files}
     has_code = bool(exts & CODE_EXTS)
-    has_ts = bool({".ts", ".tsx"} & exts)
-    has_py = ".py" in exts
+
+    # A handful of .ts files in an otherwise-JS repo (e.g. Deno Edge Functions
+    # in a Phaser game) shouldn't trigger a TypeScript-config warning. Treat
+    # the language as "really used" only when there's a real signal: a config
+    # file, a deps declaration, or enough files to look like the main stack.
+    # Crown calibration: 2 .ts files (out of 73 .js) — currently warns; should be n/a.
+    LANG_PRESENCE_FLOOR = 4
+
+    def _file_count(extensions: set[str]) -> int:
+        return sum(1 for e in (ext_of(f) for f in files) if e in extensions)
+
+    def _has_npm_dep(pkg: str) -> bool:
+        if "package.json" not in rootfiles:
+            return False
+        try:
+            obj = json.loads(_rt(root, "package.json"))
+        except Exception:
+            return False
+        for key in ("dependencies", "devDependencies", "peerDependencies",
+                    "optionalDependencies"):
+            if pkg in (obj.get(key) or {}):
+                return True
+        return False
+
+    has_ts_files = bool({".ts", ".tsx"} & exts)
+    has_ts = has_ts_files and (
+        "tsconfig.json" in bn
+        or _has_npm_dep("typescript")
+        or _file_count({".ts", ".tsx"}) >= LANG_PRESENCE_FLOOR
+    )
+    has_py_files = ".py" in exts
+    has_py = has_py_files and (
+        "pyproject.toml" in rootfiles
+        or "setup.py" in rootfiles
+        or "setup.cfg" in rootfiles
+        or "requirements.txt" in rootfiles
+        or _file_count({".py"}) >= LANG_PRESENCE_FLOOR
+    )
 
     # Discoverable test command
     test_cmd = False

@@ -111,52 +111,89 @@ class TestAgentFileDetection(unittest.TestCase):
 
 
 class TestAgentUsefulness(unittest.TestCase):
-    """A2: usefulness heuristic — actionable / actionable_no_structure / thin."""
+    """A2: usefulness heuristic — 2-of-3 across {commands, structure, rules}.
+    Vendor-neutral by design: rules-heavy .cursorrules / .windsurfrules files
+    qualify on the rules signal, not just markdown shape."""
 
-    def test_actionable_full(self):
+    def test_actionable_commands_plus_structure(self):
         text = (
             "# Project\n\n## Commands\n\n```bash\npytest\nnpm test\n```\n\n"
             "## Architecture\n\nThings live in src/."
         )
-        self.assertEqual(_agent_usefulness(text), "actionable")
+        self.assertEqual(_agent_usefulness(text)["grade"], "actionable")
 
-    def test_actionable_via_token_only(self):
-        # Plain prose mentioning concrete invocations + a doc link counts.
+    def test_actionable_via_token_plus_doc_link(self):
         text = "Run `pytest` for tests, `npm run build` to build. See [docs](docs/foo.md)."
-        self.assertEqual(_agent_usefulness(text), "actionable")
+        out = _agent_usefulness(text)
+        self.assertEqual(out["grade"], "actionable")
+        self.assertTrue(out["signals"]["commands"])
+        self.assertTrue(out["signals"]["structure"])
 
-    def test_actionable_no_structure(self):
-        # Commands present, no structure pointer.
+    def test_actionable_rules_style_file(self):
+        # A `.cursorrules`-style file: no markdown headings, no fenced commands,
+        # but heavy imperative rules language. Should grade actionable on the
+        # rules+commands axes (mentions `pytest` once for build/test).
+        text = (
+            "Always use double quotes for strings.\n"
+            "Never disable type checks.\n"
+            "Prefer dataclasses over plain dicts.\n"
+            "Run `pytest` before committing.\n"
+            "Do not import from internal packages directly.\n"
+        )
+        out = _agent_usefulness(text)
+        self.assertTrue(out["signals"]["rules"],
+                        "should detect imperative rules language")
+        self.assertEqual(out["grade"], "actionable")
+
+    def test_partial_commands_only(self):
+        # Build commands but no structure, no rules language.
         text = "## Build\n\n```sh\ncargo test\ncargo build\n```\n"
-        self.assertEqual(_agent_usefulness(text), "actionable_no_structure")
+        out = _agent_usefulness(text)
+        self.assertEqual(out["grade"], "partial")
+        self.assertTrue(out["signals"]["commands"])
+        self.assertFalse(out["signals"]["structure"])
+        self.assertFalse(out["signals"]["rules"])
 
-    def test_thin_no_commands(self):
-        # Prose only — no command tokens, no commands heading-with-fence.
+    def test_partial_rules_only(self):
+        # A pure rules file with no commands or structure pointer — still
+        # earns partial credit (was "thin" pre-A fix and bias).
+        text = (
+            "Always prefer composition over inheritance.\n"
+            "Never use mutable default arguments.\n"
+            "Avoid global state.\n"
+        )
+        out = _agent_usefulness(text)
+        self.assertEqual(out["grade"], "partial")
+        self.assertTrue(out["signals"]["rules"])
+
+    def test_thin_no_signals(self):
         text = (
             "# Agent Guide\n\nThis project is a library. Please be polite to the "
             "code and respect existing conventions when contributing."
         )
-        self.assertEqual(_agent_usefulness(text), "thin")
+        self.assertEqual(_agent_usefulness(text)["grade"], "thin")
 
     def test_thin_too_short(self):
-        self.assertEqual(_agent_usefulness("hi"), "thin")
-        self.assertEqual(_agent_usefulness(""), "thin")
+        self.assertEqual(_agent_usefulness("hi")["grade"], "thin")
+        self.assertEqual(_agent_usefulness("")["grade"], "thin")
 
     def test_false_positive_fenced_heading(self):
-        # A "## Build" inside a fenced example shouldn't count as a heading
-        # for the commands-heading heuristic. Without other signals it's thin.
         text = (
             "# Style guide\n\nUse h2 for sections, e.g.:\n\n"
             "```\n## Build\n```\n\nThat's all."
         )
-        self.assertEqual(_agent_usefulness(text), "thin")
+        self.assertEqual(_agent_usefulness(text)["grade"], "thin")
 
     def test_best_usefulness_ranking(self):
-        self.assertEqual(
-            _best_usefulness(["thin", "actionable", "actionable_no_structure"]),
-            "actionable",
-        )
-        self.assertEqual(_best_usefulness(["thin", "thin"]), "thin")
+        graded = [
+            _agent_usefulness("Welcome to the project. Be nice."),  # thin
+            _agent_usefulness(
+                "## Build\n\n```\npytest\n```\n\nSee [docs](docs/foo.md)."
+            ),  # actionable (commands + structure)
+            _agent_usefulness("## Build\n\n```sh\npytest tests/ --cov\n```\n"),  # partial
+        ]
+        best = _best_usefulness(graded)
+        self.assertEqual(best["grade"], "actionable")
         self.assertIsNone(_best_usefulness([]))
 
 
@@ -186,7 +223,13 @@ class TestAgentInstructionScoring(unittest.TestCase):
         # Present at root but no commands — dinged within the 15-pt cap.
         self.assertEqual(self._agent_pts(agent_usefulness_root="thin"), 9.0)
 
-    def test_root_no_structure_middle(self):
+    def test_root_partial_middle(self):
+        # New name (Fix A): the 11-pt slot is now "partial" (1-of-3 signals).
+        self.assertEqual(self._agent_pts(agent_usefulness_root="partial"), 11.0)
+
+    def test_legacy_alias_preserved(self):
+        # Snapshots produced by pre-0.6.1 versions used "actionable_no_structure".
+        # Scoring layer keeps the alias so old snapshots still trend correctly.
         self.assertEqual(
             self._agent_pts(agent_usefulness_root="actionable_no_structure"), 11.0
         )
@@ -449,6 +492,115 @@ class TestDocTechDebtFindings(unittest.TestCase):
         fresh = next(c for c in result["categories"] if c["id"] == "doc_freshness")
         # 12 * (0.0 / 1) = 0
         self.assertEqual(fresh["points"], 0.0)
+
+
+# --- v0.6.1 accuracy fixes -------------------------------------------------
+
+
+class TestLanguagePresenceFloor(unittest.TestCase):
+    """Fix C: incidental .ts/.py files shouldn't trigger type_config warnings.
+    Calibrated against crown: 2 .ts (Deno edge functions) + 73 .js → no warn."""
+
+    def _setup_scratch(self, files: dict[str, str]) -> Path:
+        d = Path(tempfile.mkdtemp())
+        for p, content in files.items():
+            full = d / p
+            full.parent.mkdir(parents=True, exist_ok=True)
+            full.write_text(content, encoding="utf-8")
+        return d
+
+    def test_incidental_ts_files_dont_trigger_warning(self):
+        # 2 .ts files in a sea of .js — no tsconfig, no typescript dep. Today's
+        # bug: this fires "Missing type config". After Fix C: type_config is n/a.
+        files = {"package.json": "{}"} | {f"a{i}.js": "x" for i in range(10)} \
+            | {"edge.ts": "x", "edge2.ts": "x"}
+        d = self._setup_scratch(files)
+        all_files = list(files.keys())
+        _findings, m = detect_setup(d, all_files, mcp_present=False, modules_total=0)
+        self.assertNotIn("type_config", m["setup_missing"],
+                         "incidental .ts files should not trigger type_config warning")
+
+    def test_real_ts_project_still_warns(self):
+        # 6 .ts files, no tsconfig — that's a real TS project missing its config.
+        files = {"package.json": "{}"} | {f"src{i}.ts": "x" for i in range(6)}
+        d = self._setup_scratch(files)
+        _findings, m = detect_setup(d, list(files.keys()),
+                                     mcp_present=False, modules_total=0)
+        self.assertIn("type_config", m["setup_missing"])
+
+    def test_typescript_dep_makes_it_real_even_with_few_files(self):
+        # typescript declared as a dep → it's a TS project regardless of file count.
+        files = {
+            "package.json": '{"devDependencies": {"typescript": "^5"}}',
+            "a.ts": "x",
+        }
+        d = self._setup_scratch(files)
+        _findings, m = detect_setup(d, list(files.keys()),
+                                     mcp_present=False, modules_total=0)
+        self.assertIn("type_config", m["setup_missing"])
+
+
+class TestB3NewnessDenominator(unittest.TestCase):
+    """Fix B: written-once should compare against commits-since-doc-existed,
+    not total repo churn. A brand-new doc in a high-commit repo shouldn't
+    read as 'untouched across 700 commits.'"""
+
+    def test_brand_new_doc_does_not_fire(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init_repo(d)
+        # Build up 150 commits of churn BEFORE the README exists.
+        for i in range(150):
+            (d / f"file{i}.py").write_text(f"x = {i}\n", encoding="utf-8")
+            _git_commit(d, env, f"f{i}", "2025-06-01 12:00:00")
+        # Now add the README as the very last commit.
+        (d / "README.md").write_text("# repo\n" * 20, encoding="utf-8")
+        _git_commit(d, env, "add readme", "2026-06-20 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertNotIn("doc_written_once", kinds,
+                         "brand-new doc shouldn't fire B3 — there was no churn AFTER it")
+
+    def test_truly_stale_doc_still_fires(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init_repo(d)
+        # README in commit 1; then 120 commits of code change.
+        (d / "README.md").write_text("# repo\n" * 20, encoding="utf-8")
+        _git_commit(d, env, "init", "2025-01-01 12:00:00")
+        for i in range(120):
+            (d / f"file{i}.py").write_text(f"x = {i}\n", encoding="utf-8")
+            _git_commit(d, env, f"f{i}", "2026-01-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        kinds = [f["detector"] for f in result["findings"]]
+        self.assertIn("doc_written_once", kinds)
+        # Evidence should use the new phrasing.
+        ev = next(f["evidence"] for f in result["findings"]
+                  if f["detector"] == "doc_written_once")
+        self.assertIn("landed after it", ev)
+
+
+class TestModuleReadmeProse(unittest.TestCase):
+    """Fix D: module_readme finding includes file count + example names."""
+
+    def test_evidence_includes_file_count_and_examples(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init_repo(d)
+        (d / "README.md").write_text("# r\n" * 20, encoding="utf-8")
+        (d / "scripts").mkdir()
+        for name in ("build.js", "pack.js", "sign.js", "publish.js"):
+            (d / "scripts" / name).write_text("// x\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+
+        result = scanner.scan(d, repo_label="t")
+        mod_finding = next((f for f in result["findings"]
+                            if f["detector"] == "module_readme" and f["path"] == "scripts"),
+                           None)
+        self.assertIsNotNone(mod_finding, "expected module_readme finding for scripts/")
+        # Evidence calls out file count and at least one example name.
+        ev = mod_finding["evidence"]
+        self.assertIn("4", ev)
+        self.assertIn("build.js", ev)
+        # The fix text is now specific to the count, not generic.
+        self.assertIn("4", mod_finding["fix"])
 
 
 if __name__ == "__main__":

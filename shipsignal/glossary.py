@@ -95,15 +95,16 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "category (20 pts) but does not cap the grade.",
     },
     "agent_instructions": {
-        "short": "An agent guide (CLAUDE.md / AGENTS.md / .cursor/rules / "
-                 ".clinerules / copilot-instructions) that tells tools how to build, "
-                 "test, and orient themselves.",
+        "short": "An agent guide (AGENTS.md / CLAUDE.md / .cursor/rules / "
+                 ".cursorrules / .windsurfrules / .clinerules / copilot-instructions) "
+                 "that tells tools how to build, test, orient, or follow conventions.",
         "tip": "Root or nested agent files, size-scaled (optional on very small repos) "
-               "and depth-graded: full credit when the file names build/test commands "
-               "AND points at structure; partial credit when commands or structure are "
-               "missing; minimum credit for a thin shell. Heuristic — looks for tokens "
-               "like 'pytest', 'npm test', a ## Commands section, and links to other "
-               "docs. 15 pts.",
+               "and depth-graded on three vendor-neutral signals: build/test "
+               "**commands**, **structure** pointer (architecture / where things live), "
+               "and **rules** / conventions (always-never style guidance — what a "
+               ".cursorrules / .windsurfrules file legitimately carries instead of "
+               "markdown headings). 2-of-3 signals = full credit; 1-of-3 = partial; "
+               "0 = thin. Heuristic, disclosed as such. 15 pts.",
     },
     "module_coverage": {
         "short": "Each detected module/package has a README, so an agent can orient "

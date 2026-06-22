@@ -43,28 +43,31 @@ def score_scan(metrics: dict) -> tuple[int, str, list[Category]]:
     cats.append(Category("entry_point", pts, 20, "scored"))
 
     # Agent instructions /15 — size-scaled (A1) and depth-graded (A2).
-    # Depth grade is heuristic (looks for build/test tokens + a structure pointer);
-    # disclosed in the glossary. Absent => 0; present-but-thin => partial credit
-    # (the file exists but doesn't help an agent build/test).
+    # Grade is heuristic and vendor-neutral: 2-of-3 across {commands, structure,
+    # rules}. "actionable" = >=2 signals; "partial" = 1; "thin" = 0. The legacy
+    # "actionable_no_structure" key is kept as an alias for snapshots written by
+    # older shipsignal versions so trend comparison still works.
     if metrics["is_small_repo"] and not metrics["has_agent_file"]:
         cats.append(Category("agent_instructions", None, None, "n/a"))
     else:
         root_use = metrics.get("agent_usefulness_root")
         nested_use = metrics.get("agent_usefulness_nested")
+        root_pts = {
+            "actionable": 15.0,
+            "partial": 11.0,
+            "actionable_no_structure": 11.0,  # legacy alias
+            "thin": 9.0,
+        }
+        nested_pts = {
+            "actionable": 9.0,
+            "partial": 7.0,
+            "actionable_no_structure": 7.0,   # legacy alias
+            "thin": 5.0,
+        }
         if metrics["has_root_agent_file"]:
-            # Best agent file is at the root — full credit when actionable.
-            pts = {
-                "actionable": 15.0,
-                "actionable_no_structure": 11.0,
-                "thin": 9.0,
-            }.get(root_use, 15.0)  # fallback to full if grade missing
+            pts = root_pts.get(root_use, 15.0)  # fallback to full if grade missing
         elif metrics["has_agent_file"]:
-            # Only nested agent files — still helpful, but less discoverable.
-            pts = {
-                "actionable": 9.0,
-                "actionable_no_structure": 7.0,
-                "thin": 5.0,
-            }.get(nested_use, 7.0)
+            pts = nested_pts.get(nested_use, 7.0)
         else:
             pts = 0.0
         cats.append(Category("agent_instructions", pts, 15, "scored"))
