@@ -11,7 +11,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from .modules import CODE_EXTS, DOC_EXTS, WAIVED_DIRS, basename, dir_of, ext_of
+from .modules import CODE_EXTS, DOC_EXTS, TEST_DATA_DIRS, WAIVED_DIRS, basename, dir_of, ext_of
 from . import gitinfo
 
 LINK_RE = re.compile(r"\]\(([^)]+)\)")
@@ -426,6 +426,10 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
     for f in files:
         if ext_of(f) not in (".md", ".markdown"):
             continue
+        # Skip test-data trees: their markdown often contains intentionally-broken
+        # links as test fixtures, which would generate false positives.
+        if any(part in TEST_DATA_DIRS for part in f.split("/")[:-1]):
+            continue
         text = (root / f).read_text(encoding="utf-8", errors="ignore")
         base = root if dir_of(f) == "." else (root / dir_of(f))
         for lineno, line in enumerate(text.splitlines(), 1):
@@ -448,11 +452,13 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                 if ext_of(tgt) in _FILE_EXTS:
                     links_checked += 1
                     broken += 1
-                    findings.append(_finding(
+                    bl = _finding(
                         "broken_link", "warn", f,
                         f"Link to '{raw}' does not resolve",
                         f"Fix or remove the link in {f}",
-                        line=lineno))
+                        line=lineno)
+                    bl["link_target"] = tgt  # used by renderer to collapse per-target
+                    findings.append(bl)
                 # extensionless / unknown-ext unresolved → doc-site route or anchor; skip
 
     # 5. doc freshness / drift (needs git history) — B4 graded drift.

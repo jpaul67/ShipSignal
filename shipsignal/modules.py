@@ -27,6 +27,11 @@ WAIVED_DIRS = {
     "tests", "test", "__tests__", "spec", "specs",
     "examples", "example", "fixtures", "e2e", "benchmarks",
 }
+# Dirs whose markdown is test input, not reader-facing docs. Links inside
+# these are often *intentionally* broken (they're the subject of the test).
+# Narrower than WAIVED_DIRS: examples/ is excluded because example-doc links
+# should resolve — only genuine test-data trees are skipped.
+TEST_DATA_DIRS = {"tests", "test", "__tests__", "spec", "specs", "fixtures", "e2e"}
 CODE_EXTS = {
     ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".rs", ".go",
     ".java", ".kt", ".rb", ".c", ".h", ".cpp", ".hpp", ".cc", ".cs",

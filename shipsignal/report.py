@@ -1,6 +1,7 @@
 """Rendering: CLI text, Markdown/HTML reports, and a badge SVG."""
 from __future__ import annotations
 
+import shutil
 from html import escape as _esc
 
 from . import __version__, glossary
@@ -43,6 +44,42 @@ def _sparkline(values: list[float], max_val: float | None = None) -> str:
     return "".join(_SPARK[min(7, int(v / mx * 7))] for v in values)
 
 
+def _terminal_width(default: int = 80) -> int:
+    try:
+        return shutil.get_terminal_size((default, 24)).columns
+    except OSError:
+        return default
+
+
+def _downsample(values: list, target: int) -> list:
+    """Bucket-average ``values`` down to length ``target`` cells. If the input
+    is already short enough, it's returned unchanged. ``None`` entries are
+    skipped within a bucket, but a bucket that is *entirely* ``None`` stays
+    ``None`` so gap-aware sparklines preserve real gaps honestly."""
+    if target <= 0 or len(values) <= target:
+        return list(values)
+    n = len(values)
+    out: list = []
+    for i in range(target):
+        lo, hi = int(i * n / target), int((i + 1) * n / target)
+        bucket = [v for v in values[lo:hi] if v is not None]
+        out.append(sum(bucket) / len(bucket) if bucket else None)
+    return out
+
+
+def _fit_spark_width(chrome: int, *, hi: int = 60, lo: int = 20) -> int:
+    """Number of sparkline cells that fit on the current terminal once you
+    subtract ``chrome`` (label + caption + padding). Clamped to ``[lo, hi]``
+    so very narrow terminals still get something useful and very wide ones
+    don't sprawl past the natural data window."""
+    return max(lo, min(hi, _terminal_width() - chrome))
+
+
+def _adaptive_spark(values: list, chrome: int, max_val: float) -> str:
+    """Width-fitting + gap-aware sparkline used by every CLI sparkline row."""
+    return _spark_series(_downsample(values, _fit_spark_width(chrome)), max_val)
+
+
 def _fix_path(f: dict) -> str:
     """Path with an optional ``:line`` suffix (#5)."""
     p = f.get("path", "")
@@ -68,11 +105,51 @@ def _fix_meta(f: dict) -> str:
 _COLLAPSE_THRESHOLD = 3  # collapse setup info findings when 3+ accumulate
 
 
-def _group_fixes(findings: list[dict], *, collapse_setup: bool = True) -> list[dict]:
+def _collapse_broken_links(bucket: list[dict]) -> list[dict]:
+    """Within an Integrity bucket, collapse broken_link findings that share
+    the same target into one bundle when ≥ _COLLAPSE_THRESHOLD files are
+    affected. Individual findings (or targets with fewer hits) stay as-is.
+    The bundle carries a ``files`` list so the HTML renderer can expand it."""
+    from collections import defaultdict
+    by_target: dict[str, list[dict]] = defaultdict(list)
+    non_link: list[dict] = []
+    for f in bucket:
+        if f.get("detector") == "broken_link" and f.get("link_target"):
+            by_target[f["link_target"]].append(f)
+        else:
+            non_link.append(f)
+
+    result: list[dict] = list(non_link)
+    for tgt, group in by_target.items():
+        if len(group) < _COLLAPSE_THRESHOLD:
+            result.extend(group)
+        else:
+            file_labels = [
+                f"{f['path']}:{f['line']}" if f.get("line") else f["path"]
+                for f in group
+            ]
+            first_two = ", ".join(file_labels[:2])
+            overflow = len(file_labels) - 2
+            fix_loc = f"{first_two}{f', +{overflow} more' if overflow > 0 else ''}"
+            bundled = {
+                "_collapsed": True,
+                "count": len(group),
+                "evidence": f"Link to '{tgt}' is broken in {len(group)} files",
+                "fix": f"Fix or remove '{tgt}' — {fix_loc}",
+                "effort": "quick",
+                "files": file_labels,
+            }
+            result.append(bundled)
+    return result
+
+
+def _group_fixes(findings: list[dict], *, collapse_setup: bool = True,
+                 collapse_links: bool = True) -> list[dict]:
     """Group findings into ``[{area, items}]`` in the fixed AREA_ORDER. Each
     ``items`` is a list of either real finding dicts or one collapsed bundle
     of low-value setup info findings (so the list doesn't drown in 5 tiny
-    convention-file misses)."""
+    convention-file misses). Broken-link findings that share a target are
+    similarly collapsed when ≥ _COLLAPSE_THRESHOLD files are affected."""
     by_area: dict[str, list[dict]] = {a: [] for a in AREA_ORDER}
     other: list[dict] = []
     for f in findings:
@@ -108,6 +185,8 @@ def _group_fixes(findings: list[dict], *, collapse_setup: bool = True) -> list[d
                 }
                 # Keep warn-level setup items separate (they're load-bearing).
                 items = [f for f in bucket if f.get("severity") != "info"] + [bundled]
+        if collapse_links and area == "Integrity":
+            items = _collapse_broken_links(items)
         blocks.append({"area": area, "items": items})
     if other:
         blocks.append({"area": "Other", "items": other})
@@ -145,10 +224,15 @@ def _render_grouped_fixes_html(findings: list[dict]) -> str:
         items_html: list[str] = []
         for it in shown:
             if it.get("_collapsed"):
-                items_html.append(
-                    f"<li>{_esc(it['evidence'])} — <i>quick</i><br>"
-                    f"<span class='fix'>→ {_esc(it['fix'])}</span></li>"
-                )
+                body = (f"<li>{_esc(it['evidence'])} — <i>quick</i><br>"
+                        f"<span class='fix'>→ {_esc(it['fix'])}</span>")
+                if it.get("files"):
+                    file_lines = "\n".join(_esc(fl) for fl in it["files"])
+                    body += (
+                        "<details class='snippet'><summary>All affected files</summary>"
+                        f"<pre>{file_lines}</pre></details>"
+                    )
+                items_html.append(body + "</li>")
                 continue
             base = (f"<li><b>{_esc(_fix_path(it))}</b> — {_esc(it['evidence'])}"
                     f"{_esc(_fix_meta(it))}<br>"
@@ -360,9 +444,13 @@ def render_impact(result: dict) -> str:
         L.append(f"   breadth: n/a — {br.get('reason', 'too few contributors')}")
     series = ad.get("weekly_series", [])
     if series:
-        spark = _sparkline([s[1] for s in series], max_val=1.0)
-        tail = "  (recent 60 wks)" if len(spark) > 60 else ""
-        L.append(f"   rate/week {spark[-60:]}{tail}  0–100%")
+        # Cap the data window at 60w (the recent slice), then size the bar
+        # count to the terminal so the line never overflows on 80 cols.
+        # Chrome = "   rate/week " (13) + "  {Nw} · 0–100%" (≈14) ≈ 28.
+        values = [s[1] for s in series]
+        window = values[-60:]
+        spark = _adaptive_spark(window, chrome=28, max_val=1.0)
+        L.append(f"   rate/week {spark}  {len(window)}w · 0–100%")
     L.append("")
 
     # --- Delivery Health breakdown ---
@@ -427,13 +515,21 @@ def render_trajectory_cli(result: dict) -> str:
     # contributor floor — team-level only, no per-person data).
     breadth = [p.get("breadth_pct") for p in periods]
     any_breadth = any(b is not None for b in breadth)
+    # Chrome accounting (3 indent + label + 2-space gap + spark + 3-space gap +
+    # caption). adoption/health captions are short ("0–100%" / "0–100"); the
+    # breadth caption is longer due to "(team-level)" so it reserves more.
     L = ["", "  Trajectory — adoption & delivery health over time",
          f"  {len(periods)} periods · ~{t['period_days']}d each · "
          "parallel timelines, NOT a causal link (blank = quiet/thin period)", "",
-         f"   adoption  {_spark_series(adoption, 100)}   0–100%",
-         f"   health    {_spark_series(health, 100)}   0–100"]
+         f"   adoption  {_adaptive_spark(adoption, chrome=22, max_val=100)}"
+         "   0–100%",
+         f"   health    {_adaptive_spark(health, chrome=22, max_val=100)}"
+         "   0–100"]
     if any_breadth:
-        L.append(f"   breadth   {_spark_series(breadth, 100)}   0–100% (team-level)")
+        L.append(
+            f"   breadth   {_adaptive_spark(breadth, chrome=35, max_val=100)}"
+            "   0–100% (team-level)"
+        )
     L += [f"   {periods[0]['start']} → {periods[-1]['start']}", ""]
     if any_breadth:
         L.append("   period       commits  adoption  health  breadth")
@@ -1011,7 +1107,8 @@ def render_trend(trend: dict) -> str:
          f"{trend['first']} → {trend['last']}", ""]
     for name, h in trend["headlines"].items():
         scale = _HEADLINE_SCALES[name]
-        spark = _spark_series(h["series"], scale)
+        # Chrome ≈ 3 (indent) + 16 (label) + 1 + 22 (arrow) + 1 + 10 (delta) + 1
+        spark = _adaptive_spark(h["series"], chrome=54, max_val=scale)
         prev = h["series"][-2] if len(h["series"]) >= 2 else None
         prev_label = _fmt_headline_value(name, prev)
         cur_label = _fmt_headline_value(name, h["current"])

@@ -314,5 +314,166 @@ class TestGroupedRenderer(unittest.TestCase):
         self.assertEqual({id(f) for f in warns_sorted[:3]}, top_ids)
 
 
+# --- broken-link collapse (2a) -------------------------------------------
+
+
+def _bl(path: str, target: str, line: int = 1) -> dict:
+    return {"detector": "broken_link", "path": path, "severity": "warn",
+            "evidence": f"Link to '{target}' does not resolve",
+            "fix": f"Fix or remove the link in {path}",
+            "area": "Integrity", "points_at_stake": 0.0, "effort": "quick",
+            "link_target": target, "line": line}
+
+
+class TestBrokenLinkCollapse(unittest.TestCase):
+    def test_collapses_when_3_plus_share_target(self):
+        findings = [_bl(f"docs/{lang}/help.md", "../release-notes.md", 9)
+                    for lang in ("de", "es", "fr", "ja")]
+        blocks = report._group_fixes(findings)
+        integrity = next(b for b in blocks if b["area"] == "Integrity")
+        collapsed = [it for it in integrity["items"] if it.get("_collapsed")]
+        self.assertEqual(len(collapsed), 1)
+        bundle = collapsed[0]
+        self.assertEqual(bundle["count"], 4)
+        self.assertIn("release-notes.md", bundle["evidence"])
+        self.assertIn("4 files", bundle["evidence"])
+        self.assertIsInstance(bundle["files"], list)
+        self.assertEqual(len(bundle["files"]), 4)
+
+    def test_below_threshold_stays_individual(self):
+        findings = [_bl(f"docs/{lang}/help.md", "../release-notes.md", 9)
+                    for lang in ("de", "es")]  # 2 < threshold of 3
+        blocks = report._group_fixes(findings)
+        integrity = next(b for b in blocks if b["area"] == "Integrity")
+        collapsed = [it for it in integrity["items"] if it.get("_collapsed")]
+        self.assertEqual(len(collapsed), 0)
+        self.assertEqual(len(integrity["items"]), 2)
+
+    def test_different_targets_stay_separate(self):
+        findings = [
+            _bl("docs/de/help.md", "../release-notes.md"),
+            _bl("docs/es/help.md", "../release-notes.md"),
+            _bl("docs/fr/help.md", "../release-notes.md"),
+            _bl("docs/de/deploy.md", "../versions.md"),  # different target
+        ]
+        blocks = report._group_fixes(findings)
+        integrity = next(b for b in blocks if b["area"] == "Integrity")
+        collapsed = [it for it in integrity["items"] if it.get("_collapsed")]
+        individual = [it for it in integrity["items"] if not it.get("_collapsed")]
+        self.assertEqual(len(collapsed), 1, "only the 3-hit target collapses")
+        self.assertEqual(len(individual), 1, "../versions.md stays individual")
+
+    def test_html_collapsed_bundle_has_files_expander(self):
+        findings = [_bl(f"docs/{lang}/help.md", "../release-notes.md", 9)
+                    for lang in ("de", "es", "fr")]
+        body = report._render_grouped_fixes_html(findings)
+        html.parser.HTMLParser().feed(body)  # well-formed
+        self.assertIn("release-notes.md", body)
+        self.assertIn("3 files", body)
+        self.assertIn("All affected files", body)  # the <details> summary
+
+
+# --- Adaptive sparkline (Option C: width-fitting + downsample) -----------
+
+
+class TestAdaptiveSparkline(unittest.TestCase):
+    def test_downsample_returns_input_when_already_short(self):
+        self.assertEqual(report._downsample([1, 2, 3], 10), [1, 2, 3])
+
+    def test_downsample_averages_buckets(self):
+        # 6 values → 3 cells: buckets of 2 each, averaged.
+        out = report._downsample([0.0, 1.0, 0.5, 0.5, 0.8, 0.2], 3)
+        self.assertEqual(out, [0.5, 0.5, 0.5])
+
+    def test_downsample_skips_none_within_bucket(self):
+        # Mixed [v, None] bucket averages just v.
+        out = report._downsample([1.0, None, 0.0, None], 2)
+        self.assertEqual(out, [1.0, 0.0])
+
+    def test_downsample_preserves_all_none_bucket_as_none(self):
+        # An all-None bucket stays None so the gap renders as a blank.
+        out = report._downsample([None, None, 1.0, 1.0], 2)
+        self.assertEqual(out, [None, 1.0])
+
+    def test_fit_spark_width_clamps(self):
+        # Even on absurdly narrow chrome, never exceeds hi.
+        n = report._fit_spark_width(chrome=0, hi=60, lo=20)
+        self.assertLessEqual(n, 60)
+        self.assertGreaterEqual(n, 20)
+        # Massive chrome can't push below lo.
+        self.assertEqual(report._fit_spark_width(chrome=1000, lo=20), 20)
+
+    def test_adaptive_spark_length_matches_fitted_width(self):
+        # 200 values must downsample to whatever _fit_spark_width returns.
+        vals = [i / 200 for i in range(200)]
+        out = report._adaptive_spark(vals, chrome=28, max_val=1.0)
+        self.assertEqual(len(out), report._fit_spark_width(chrome=28))
+
+    def test_rate_week_line_fits_80_cols(self):
+        """Regression: the exact rate/week shape must fit in 80 cols on the
+        default terminal width. This is the line that motivated Option C."""
+        # The construction mirrors render_impact's rate/week block.
+        for nweeks in (60, 130, 400):
+            window = [w / nweeks for w in range(1, nweeks + 1)][-60:]
+            spark = report._adaptive_spark(window, chrome=28, max_val=1.0)
+            line = f"   rate/week {spark}  {len(window)}w · 0–100%"
+            self.assertLessEqual(
+                len(line), 80,
+                f"rate/week line is {len(line)} cols at nweeks={nweeks}: {line!r}"
+            )
+            self.assertIn("w · 0–100%", line)
+            # Spark width must match what the fitter says it should be.
+            self.assertEqual(len(spark), report._fit_spark_width(chrome=28))
+
+
+class TestTestDataDirSkip(unittest.TestCase):
+    """Broken links inside test-data dirs should not fire (Change 1)."""
+
+    def test_fixture_markdown_not_link_checked(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init(d)
+        # A fixture file with a broken link — should NOT appear in findings.
+        (d / "tests").mkdir()
+        (d / "tests" / "fixture.md").write_text(
+            "# Test fixture\n[broken](./does-not-exist.md)\n", encoding="utf-8"
+        )
+        # A real README with a good link so the scanner has something to check.
+        (d / "README.md").write_text("# Root\n\nNo broken links here.\n" * 10,
+                                     encoding="utf-8")
+        (d / "main.py").write_text("x=1\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        bl = [f for f in result["findings"] if f["detector"] == "broken_link"]
+        self.assertEqual(bl, [], "no broken_link findings from test-fixture markdown")
+
+    def test_real_doc_broken_link_still_fires(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init(d)
+        (d / "README.md").write_text(
+            "# Root\n\n" + "padding\n" * 10 +
+            "[missing](./does-not-exist.md)\n",
+            encoding="utf-8"
+        )
+        (d / "main.py").write_text("x=1\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        bl = [f for f in result["findings"] if f["detector"] == "broken_link"]
+        self.assertTrue(bl, "broken link in real README must still fire")
+
+    def test_examples_dir_still_link_checked(self):
+        d = Path(tempfile.mkdtemp())
+        env = _git_init(d)
+        (d / "README.md").write_text("# Root\n" * 10, encoding="utf-8")
+        (d / "examples").mkdir()
+        (d / "examples" / "guide.md").write_text(
+            "# Guide\n[broken](./missing.md)\n", encoding="utf-8"
+        )
+        (d / "main.py").write_text("x=1\n", encoding="utf-8")
+        _git_commit(d, env, "init", "2026-05-01 12:00:00")
+        result = scanner.scan(d, repo_label="t")
+        bl = [f for f in result["findings"] if f["detector"] == "broken_link"]
+        self.assertTrue(bl, "broken links in examples/ should still be checked")
+
+
 if __name__ == "__main__":
     unittest.main()
