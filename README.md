@@ -62,7 +62,14 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates.
 
-Add `--snapshot` to any command to persist a small (<8KB) JSON record under `.shipsignal/snapshots/YYYY-MM-DD-<sha>.json`. Gitignored by default; remove the `.shipsignal/` line from `.gitignore` to commit your audit history. The forthcoming `shipsignal trend` command will diff snapshots to show score / breadth / fixes movement over time.
+Add `--snapshot` to any command to persist a small (<8KB) JSON record under `.shipsignal/snapshots/YYYY-MM-DD-<sha>.json`. Gitignored by default; remove the `.shipsignal/` line from `.gitignore` to commit your audit history. Then:
+
+```bash
+shipsignal trend . --html trend.html   # readiness/breadth/AI deltas + SVG line chart
+shipsignal trend . --limit 8 --since 2026-01-01
+```
+
+The trend view reads only existing snapshots — no re-scan, fully offline. Honest about single-snapshot ("scan again to start a trend"), schema-version mismatches (skips the fixes diff rather than inventing false resolutions), and large window jumps (warns when one snapshot covers >30% more commits than its predecessor).
 
 ## Project layout
 

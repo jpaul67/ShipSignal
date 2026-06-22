@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import gitinfo, impact, report, scanner, snapshot
+from . import gitinfo, impact, report, scanner, snapshot, trend
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -145,6 +145,28 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _cmd_trend(args: argparse.Namespace) -> int:
+    """Visual snapshot viewer (S2). Reads .shipsignal/snapshots/, renders
+    the delta view. Never re-scans — strictly local, offline, fast."""
+    target = Path(args.target)
+    if not target.exists():
+        print(f"  not a path: {args.target}", file=sys.stderr)
+        return 2
+    snapshots = snapshot.load_snapshots(target)
+    snapshots = snapshot.filter_snapshots(snapshots, since=args.since, limit=args.limit)
+    trend_result = trend.compute_trend(snapshots)
+    print(report.render_trend(trend_result))
+    for path, payload in (
+        (args.json, lambda: json.dumps(trend_result, indent=2, default=str)),
+        (args.md, lambda: report.render_trend_markdown(trend_result)),
+        (args.html, lambda: report.render_trend_html(trend_result)),
+    ):
+        if path:
+            Path(path).write_text(payload(), encoding="utf-8")
+            print(f"  wrote {path}")
+    return 0
+
+
 def _cmd_report(args: argparse.Namespace) -> int:
     """Unified audit: run both lenses, emit one combined deliverable."""
     # Report runs the Impact lens too → full clone for remote targets.
@@ -243,6 +265,20 @@ def main(argv: list[str] | None = None) -> int:
                           help="persist a small JSON snapshot for `shipsignal trend` "
                                "(default: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
 
+    trend_p = sub.add_parser(
+        "trend",
+        help="view the trend across snapshots (no re-scan; reads .shipsignal/snapshots/)",
+    )
+    trend_p.add_argument("target", nargs="?", default=".",
+                         help="repo root containing .shipsignal/snapshots/ (default: .)")
+    trend_p.add_argument("--limit", type=int, default=4, metavar="N",
+                         help="show the most-recent N snapshots (default: 4)")
+    trend_p.add_argument("--since", default=None, metavar="YYYY-MM-DD",
+                         help="only snapshots whose commit_date is on/after this date")
+    trend_p.add_argument("--json", metavar="FILE", help="write the trend payload to FILE")
+    trend_p.add_argument("--md", metavar="FILE", help="write a Markdown trend report to FILE")
+    trend_p.add_argument("--html", metavar="FILE", help="write an HTML trend view to FILE")
+
     args = parser.parse_args(argv)
     if args.cmd == "scan":
         return _cmd_scan(args)
@@ -250,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_impact(args)
     if args.cmd == "report":
         return _cmd_report(args)
+    if args.cmd == "trend":
+        return _cmd_trend(args)
     parser.print_help()
     return 2
 

@@ -741,3 +741,391 @@ def render_badge(result: dict) -> str:
 <text x="{lw / 2:.0f}" y="14">{label}</text>
 <text x="{lw + rw / 2:.0f}" y="14">{value}</text>
 </g></svg>"""
+
+
+# ---------------------------------------------------------------------------
+# Trend renderers (Feature S2 — Visual Snapshot Viewer)
+# ---------------------------------------------------------------------------
+# Each headline has its own scale + display formatter. Keeping these in one
+# place so CLI / Markdown / HTML render them identically.
+_HEADLINE_LABELS = {
+    "readiness": "Readiness",
+    "breadth": "Breadth",
+    "ai_adoption": "AI Adoption",
+    "delivery_health": "Delivery Health",
+}
+_HEADLINE_SCALES = {
+    "readiness": 100,
+    "breadth": 100,
+    "ai_adoption": 1,           # stored as a fraction 0–1
+    "delivery_health": 100,
+}
+
+
+def _fmt_headline_value(name: str, v) -> str:
+    """How a current/previous value is displayed (CLI + HTML use the same)."""
+    if v is None:
+        return "n/a"
+    if name == "readiness":
+        return f"{v:g}"
+    if name == "delivery_health":
+        return f"{v:g}/100"
+    if name == "breadth":
+        return f"{v:g}%"
+    if name == "ai_adoption":
+        return f"{v * 100:.0f}%"
+    return str(v)
+
+
+def _fmt_headline_delta(name: str, delta) -> str:
+    """Render a delta with the right unit. ``None`` means we deliberately
+    didn't compute one (one side was n/a); render as an explainer, never 0."""
+    if delta is None:
+        return ""
+    sign = "+" if delta >= 0 else ""
+    if name == "ai_adoption":
+        # share is 0–1; report in percentage points so the unit matches "58%".
+        return f"({sign}{delta * 100:.0f}pp)"
+    if name == "breadth":
+        return f"({sign}{delta:g}pp)"
+    return f"({sign}{delta:g})"
+
+
+def render_trend(trend: dict) -> str:
+    """CLI text rendering of a trend payload — sparkline-driven, honest about
+    single-point and empty cases."""
+    status = trend.get("status")
+    if status == "empty":
+        return (f"\n  ShipSignal trend — no snapshots found\n"
+                f"  {trend.get('reason', '')}\n")
+    repo = trend.get("repo", "")
+    if status == "single_point":
+        L = ["", f"  ShipSignal trend — {repo}",
+             f"  1 snapshot · {trend.get('last', '?')}",
+             f"  {trend.get('reason', '')}", ""]
+        for name, h in trend["headlines"].items():
+            L.append(f"   {_HEADLINE_LABELS[name]:<16} "
+                     f"{_fmt_headline_value(name, h['current'])}")
+        still_open = (trend.get("fixes") or {}).get("still_open_count", 0)
+        L += ["", f"   Open fixes at this point: {still_open}", ""]
+        return "\n".join(L)
+
+    L = ["", f"  ShipSignal trend — {repo}",
+         f"  {trend['snapshot_count']} snapshots · "
+         f"{trend['first']} → {trend['last']}", ""]
+    for name, h in trend["headlines"].items():
+        scale = _HEADLINE_SCALES[name]
+        spark = _spark_series(h["series"], scale)
+        prev = h["series"][-2] if len(h["series"]) >= 2 else None
+        prev_label = _fmt_headline_value(name, prev)
+        cur_label = _fmt_headline_value(name, h["current"])
+        delta_label = _fmt_headline_delta(name, h["delta"])
+        arrow = f"{prev_label} → {cur_label}"
+        L.append(f"   {_HEADLINE_LABELS[name]:<16} "
+                 f"{arrow:<22} {delta_label:<10} {spark}")
+    L.append("")
+
+    flips = trend.get("category_flips") or []
+    for fl in flips:
+        L.append(f"  ! {fl['id']} flipped {fl['from']} → {fl['to']} "
+                 "(status change, not a score change)")
+    if flips:
+        L.append("")
+
+    fixes = trend.get("fixes") or {}
+    if fixes.get("comparable"):
+        resolved = fixes.get("resolved", [])
+        added = fixes.get("new", [])
+        still = fixes.get("still_open_count", 0)
+        L.append(f"  Fixes since last snapshot — "
+                 f"{len(resolved)} resolved · {len(added)} new · {still} still open")
+        for f in resolved[:5]:
+            L.append(f"    ✓ resolved  {f['detector']} {f['path']}")
+        for f in added[:5]:
+            L.append(f"    + new       {f['detector']} {f['path']}")
+        if len(resolved) > 5 or len(added) > 5:
+            L.append(f"    … {max(0, len(resolved) - 5) + max(0, len(added) - 5)} more "
+                     "(see JSON output for the full list)")
+    elif fixes.get("schema_warning"):
+        L.append(f"  Fixes diff: skipped — {fixes['schema_warning']}")
+    L.append("")
+
+    win = trend.get("window") or {}
+    if win.get("growth_warning"):
+        L.append(f"  ! {win['growth_warning']}")
+        L.append("")
+    return "\n".join(L)
+
+
+def render_trend_markdown(trend: dict) -> str:
+    """Markdown form — same content as CLI, formatted for docs/PR bodies."""
+    status = trend.get("status")
+    if status == "empty":
+        return (f"# ShipSignal trend — no snapshots found\n\n"
+                f"{trend.get('reason', '')}\n")
+    repo = trend.get("repo", "")
+    if status == "single_point":
+        L = [f"# ShipSignal trend — {repo}", "",
+             f"*1 snapshot · {trend.get('last', '?')}*", "",
+             f"*{trend.get('reason', '')}*", "",
+             "| Metric | Value |", "|---|---|"]
+        for name, h in trend["headlines"].items():
+            L.append(f"| {_HEADLINE_LABELS[name]} | "
+                     f"{_fmt_headline_value(name, h['current'])} |")
+        still = (trend.get("fixes") or {}).get("still_open_count", 0)
+        L += ["", f"Open fixes at this point: **{still}**", ""]
+        return "\n".join(L)
+
+    L = [f"# ShipSignal trend — {repo}", "",
+         f"*{trend['snapshot_count']} snapshots · "
+         f"{trend['first']} → {trend['last']}*", "",
+         "| Metric | Previous | Current | Δ | Trend |",
+         "|---|---|---|---|---|"]
+    for name, h in trend["headlines"].items():
+        spark = _spark_series(h["series"], _HEADLINE_SCALES[name])
+        prev = h["series"][-2] if len(h["series"]) >= 2 else None
+        L.append(f"| {_HEADLINE_LABELS[name]} | "
+                 f"{_fmt_headline_value(name, prev)} | "
+                 f"{_fmt_headline_value(name, h['current'])} | "
+                 f"{_fmt_headline_delta(name, h['delta']) or '—'} | "
+                 f"`{spark}` |")
+    L.append("")
+
+    flips = trend.get("category_flips") or []
+    for fl in flips:
+        L.append(f"> ⚠️ `{fl['id']}` flipped **{fl['from']}** → **{fl['to']}** "
+                 "(status change, not a score change).")
+    if flips:
+        L.append("")
+
+    fixes = trend.get("fixes") or {}
+    if fixes.get("comparable"):
+        resolved = fixes.get("resolved", [])
+        added = fixes.get("new", [])
+        still = fixes.get("still_open_count", 0)
+        L += [f"## Fixes since last snapshot",
+              f"- ✅ **{len(resolved)} resolved**",
+              f"- ➕ **{len(added)} new**",
+              f"- ⏳ {still} still open", ""]
+        if resolved:
+            L.append("**Resolved:**")
+            for f in resolved[:10]:
+                L.append(f"- `{f['detector']}` — {f['path']}")
+            L.append("")
+        if added:
+            L.append("**New:**")
+            for f in added[:10]:
+                L.append(f"- `{f['detector']}` — {f['path']}")
+            L.append("")
+    elif fixes.get("schema_warning"):
+        L += ["## Fixes", f"*Skipped — {fixes['schema_warning']}*", ""]
+
+    win = trend.get("window") or {}
+    if win.get("growth_warning"):
+        L += [f"> ⚠️ {win['growth_warning']}", ""]
+
+    L += [f"<sub>shipsignal v{__version__}</sub>", ""]
+    return "\n".join(L)
+
+
+def _svg_trend(headlines: dict, dates: list[str]) -> str:
+    """Inline SVG: readiness + breadth + AI adoption (normalized to 0–100)
+    over snapshot dates. Gap-aware (None values break the line, like the
+    trajectory chart). No external deps."""
+    n = len(dates)
+    W, H, Lm, Rm, Tm, Bm = 680, 240, 44, 16, 24, 40
+    pw, ph = W - Lm - Rm, H - Tm - Bm
+
+    def xc(i: int) -> float:
+        return Lm + (pw * i / (n - 1) if n > 1 else pw / 2)
+
+    def yc(v: float) -> float:
+        return Tm + ph * (1 - v / 100)
+
+    grid = ""
+    for gv in (0, 50, 100):
+        gy = yc(gv)
+        grid += (f"<line x1='{Lm}' y1='{gy:.1f}' x2='{W - Rm}' y2='{gy:.1f}' stroke='#eee'/>"
+                 f"<text x='{Lm - 6}' y='{gy + 3:.1f}' text-anchor='end' font-size='10' "
+                 f"fill='#aaa'>{gv}</text>")
+
+    def series_norm(name: str, color: str) -> str:
+        scale = _HEADLINE_SCALES[name]
+        series = headlines[name]["series"]
+        # Normalize to 0–100 so all three sit on the same y-axis honestly.
+        pts = []
+        for i, v in enumerate(series):
+            if v is None:
+                pts.append(None)
+            else:
+                pct = v * (100 / scale) if scale != 100 else v
+                pts.append((xc(i), yc(pct)))
+        out = ""
+        for a, b in zip(pts, pts[1:]):
+            if a and b:
+                out += (f"<line x1='{a[0]:.1f}' y1='{a[1]:.1f}' "
+                        f"x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
+                        f"stroke='{color}' stroke-width='2'/>")
+        out += "".join(f"<circle cx='{q[0]:.1f}' cy='{q[1]:.1f}' r='2.5' "
+                       f"fill='{color}'/>" for q in pts if q)
+        return out
+
+    readiness_line = series_norm("readiness", "#4477dd")
+    breadth_line = series_norm("breadth", "#b86a2c")
+    ai_line = series_norm("ai_adoption", "#4c1")
+
+    xlabels = (f"<text x='{xc(0):.1f}' y='{H - 14}' font-size='10' fill='#aaa'>"
+               f"{_esc(dates[0])}</text>"
+               f"<text x='{xc(n - 1):.1f}' y='{H - 14}' text-anchor='end' "
+               f"font-size='10' fill='#aaa'>{_esc(dates[-1])}</text>")
+    legend = (
+        f"<circle cx='{Lm + 6}' cy='{H - 26}' r='3' fill='#4477dd'/>"
+        f"<text x='{Lm + 14}' y='{H - 23}' font-size='10' fill='#555'>readiness</text>"
+        f"<circle cx='{Lm + 92}' cy='{H - 26}' r='3' fill='#b86a2c'/>"
+        f"<text x='{Lm + 100}' y='{H - 23}' font-size='10' fill='#555'>breadth</text>"
+        f"<circle cx='{Lm + 168}' cy='{H - 26}' r='3' fill='#4c1'/>"
+        f"<text x='{Lm + 176}' y='{H - 23}' font-size='10' fill='#555'>ai adoption</text>"
+    )
+    return (f"<svg viewBox='0 0 {W} {H}' width='100%' style='max-width:680px' "
+            f"xmlns='http://www.w3.org/2000/svg' font-family='sans-serif'>"
+            f"{grid}{readiness_line}{breadth_line}{ai_line}{xlabels}{legend}</svg>")
+
+
+def _trend_card(name: str, h: dict) -> str:
+    """One stat card for the trend header — current value + delta chip + sparkline."""
+    spark = _spark_series(h["series"], _HEADLINE_SCALES[name])
+    cur = _fmt_headline_value(name, h["current"])
+    prev = h["series"][-2] if len(h["series"]) >= 2 else None
+    prev_label = _fmt_headline_value(name, prev) if prev is not None else "—"
+    delta_label = _fmt_headline_delta(name, h["delta"])
+    color = "#4477dd"
+    if h["delta"] is not None:
+        if (name == "readiness" or name == "delivery_health" or
+                name == "breadth" or name == "ai_adoption"):
+            color = "#4c1" if h["delta"] >= 0 else "#e05d44"
+    delta_chip = (f"<span class='dchip' style='background:{color}'>"
+                  f"{_esc(delta_label)}</span>") if delta_label else ""
+    return (f"<div class='tcard'>"
+            f"<div class='clabel'>{_esc(_HEADLINE_LABELS[name])}</div>"
+            f"<div class='cval'>{_esc(cur)} {delta_chip}</div>"
+            f"<div class='csub'>was {_esc(prev_label)}</div>"
+            f"<div class='spark'>{_esc(spark)}</div></div>")
+
+
+def render_trend_html(trend: dict) -> str:
+    """HTML deliverable — three stat cards, an SVG over-time chart, fixes
+    movement, and the snapshot table. Reuses the audit CSS for visual
+    consistency."""
+    status = trend.get("status")
+    repo = trend.get("repo") or ""
+
+    if status == "empty":
+        body = (f"<h1>ShipSignal trend</h1>"
+                f"<p>No snapshots found.</p>"
+                f"<p class='hint'>{_esc(trend.get('reason', ''))}</p>")
+        return _trend_html_wrap(repo, body)
+
+    if status == "single_point":
+        cards = "".join(_trend_card(n, h) for n, h in trend["headlines"].items())
+        still = (trend.get("fixes") or {}).get("still_open_count", 0)
+        body = (
+            f"<h1>ShipSignal trend — {_esc(repo)}</h1>"
+            f"<div class='sub'>1 snapshot · {_esc(trend.get('last', ''))}</div>"
+            f"<div class='headline'>{_esc(trend.get('reason', ''))}</div>"
+            f"<div class='cards'>{cards}</div>"
+            f"<p>Open fixes at this point: <b>{still}</b></p>"
+        )
+        return _trend_html_wrap(repo, body)
+
+    cards = "".join(_trend_card(n, h) for n, h in trend["headlines"].items())
+    dates = [None] * trend["snapshot_count"]
+    # Best-effort: pull dates from the series alignment of one headline; the
+    # caller passes us pre-aligned series, so any one of them works.
+    # We don't actually need per-snapshot dates here — the SVG uses first/last
+    # for tick labels and the series indices for positioning.
+    first, last = trend.get("first") or "", trend.get("last") or ""
+    dates = [first] + [""] * (trend["snapshot_count"] - 2) + [last] \
+        if trend["snapshot_count"] >= 2 else [first]
+    chart = _svg_trend(trend["headlines"], dates)
+
+    fixes = trend.get("fixes") or {}
+    flips = trend.get("category_flips") or []
+    win = trend.get("window") or {}
+
+    notices = ""
+    if win.get("growth_warning"):
+        notices += f"<div class='withheld'>⚠️ {_esc(win['growth_warning'])}</div>"
+    for fl in flips:
+        notices += (f"<div class='withheld'>⚠️ <code>{_esc(fl['id'])}</code> "
+                    f"flipped <b>{_esc(str(fl['from']))}</b> → "
+                    f"<b>{_esc(str(fl['to']))}</b> — status change, not a score change."
+                    f"</div>")
+
+    if fixes.get("comparable"):
+        resolved = fixes.get("resolved", [])
+        added = fixes.get("new", [])
+        still = fixes.get("still_open_count", 0)
+        resolved_html = "".join(
+            f"<li>✅ <code>{_esc(f['detector'])}</code> — {_esc(f['path'])}</li>"
+            for f in resolved[:10]
+        ) or "<li class='hint'>none</li>"
+        new_html = "".join(
+            f"<li>➕ <code>{_esc(f['detector'])}</code> — {_esc(f['path'])}</li>"
+            for f in added[:10]
+        ) or "<li class='hint'>none</li>"
+        fixes_block = (
+            f"<h2>Fixes since last snapshot</h2>"
+            f"<div class='fixrow'>"
+            f"<div><b>{len(resolved)} resolved</b><ul>{resolved_html}</ul></div>"
+            f"<div><b>{len(added)} new</b><ul>{new_html}</ul></div>"
+            f"<div><b>{still} still open</b></div>"
+            f"</div>"
+        )
+    elif fixes.get("schema_warning"):
+        fixes_block = (f"<h2>Fixes</h2><div class='withheld'>"
+                       f"Skipped — {_esc(fixes['schema_warning'])}</div>")
+    else:
+        fixes_block = ""
+
+    body = (
+        f"<h1>ShipSignal trend — {_esc(repo)}</h1>"
+        f"<div class='sub'>{trend['snapshot_count']} snapshots · "
+        f"{_esc(first)} → {_esc(last)}</div>"
+        f"{notices}"
+        f"<div class='cards'>{cards}</div>"
+        f"<h2>Over time</h2>"
+        f"<p class='hint'>All three series normalized to 0–100 for one axis. "
+        f"Gap = a snapshot where the metric was n/a (e.g. solo repo, breadth not "
+        f"meaningful). Never zero-filled.</p>"
+        f"{chart}"
+        f"{fixes_block}"
+    )
+    return _trend_html_wrap(repo, body)
+
+
+def _trend_html_wrap(repo: str, body: str) -> str:
+    """Shared HTML chrome for trend views — same CSS family as the audit pages
+    so a `trend.html` next to a `report.html` looks at home."""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>ShipSignal trend — {_esc(repo)}</title><style>
+body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
+h1{{font-size:18px;margin-bottom:2px}}h2{{font-size:15px;margin-top:28px}}
+.sub{{color:#888;margin-bottom:18px}}
+.cards{{display:flex;gap:12px;margin:16px 0 24px;flex-wrap:wrap}}
+.tcard{{flex:1;min-width:160px;background:#fafafa;border-radius:8px;padding:14px 16px;border-top:3px solid #4477dd}}
+.clabel{{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
+.cval{{font-size:22px;font-weight:700;margin:4px 0}}
+.csub{{color:#777;font-size:12px}}
+.dchip{{display:inline-block;color:#fff;border-radius:5px;padding:1px 8px;font-size:12px;margin-left:6px;vertical-align:middle}}
+.spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:2px;margin-top:6px}}
+.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
+.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:10px 14px;border-radius:0 6px 6px 0;margin:10px 0;color:#444}}
+.hint{{color:#666;font-size:13px;font-weight:400}}
+.fixrow{{display:flex;gap:18px;flex-wrap:wrap}}
+.fixrow > div{{flex:1;min-width:200px}}
+ul{{padding-left:18px}}li{{margin:6px 0}}code{{background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px}}
+sub{{color:#aaa}}
+</style></head><body>
+{body}
+<p><sub>shipsignal v{__version__}</sub></p>
+</body></html>"""

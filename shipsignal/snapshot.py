@@ -183,3 +183,73 @@ def write_snapshot(snapshot: dict, path: Path) -> Path:
     # Trailing newline matches POSIX convention + plays nice with diff tools.
     path.write_text(payload + "\n", encoding="utf-8")
     return path
+
+
+# ---------------------------------------------------------------------------
+# Load + filter — feeds the trend command (S2). Reads what S1 has written.
+# ---------------------------------------------------------------------------
+def _resolve_snapshots_dir(path: Path) -> Path:
+    """Accept a repo root or the snapshots dir itself.
+
+    Resolution order:
+      1. If ``path/.shipsignal/snapshots`` exists, use that (the standard
+         repo-root case).
+      2. Else if ``path`` itself is a directory with ``*.json`` files in it,
+         use ``path`` directly (the "I'm pointing at the snapshots dir"
+         case — useful for CI artifacts or unconventional layouts).
+      3. Else return the default location even if it doesn't exist — the
+         caller surfaces the "no snapshots yet" message.
+    """
+    standard = path / DEFAULT_SNAPSHOT_DIR
+    if standard.exists() and standard.is_dir():
+        return standard
+    if path.is_dir() and any(path.glob("*.json")):
+        return path
+    return standard
+
+
+def load_snapshots(path: Path) -> list[dict]:
+    """Load all snapshot JSON files under PATH, sorted by ``(commit_date, name)``.
+
+    PATH can be a repo root (looks in ``.shipsignal/snapshots/``) or the
+    snapshots directory itself. Malformed JSON files are silently skipped —
+    we'd rather show the user a degraded trend than crash on one bad file.
+
+    Returns ``[]`` when the directory is missing or empty (callers handle the
+    "no snapshots yet — scan with --snapshot to start" case).
+    """
+    snaps_dir = _resolve_snapshots_dir(path)
+    if not snaps_dir.exists() or not snaps_dir.is_dir():
+        return []
+    out: list[dict] = []
+    for f in sorted(snaps_dir.glob("*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict) or "schema_version" not in data:
+            continue  # not a snapshot file
+        # Stash the source filename so trend output can cite it.
+        data.setdefault("_source_file", f.name)
+        out.append(data)
+    # Sort by commit_date (chronological); ties broken by filename so the
+    # ordering is stable across runs and identical at the same commit.
+    out.sort(key=lambda s: (s.get("commit_date") or "", s.get("_source_file", "")))
+    return out
+
+
+def filter_snapshots(
+    snapshots: list[dict],
+    *,
+    since: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
+    """Apply ``--since`` then ``--limit``. Order matters: limit is applied
+    AFTER the date filter so users can say "last 4 since March 1" and get
+    the most-recent 4 within that window."""
+    out = snapshots
+    if since:
+        out = [s for s in out if (s.get("commit_date") or "") >= since]
+    if limit is not None and limit > 0:
+        out = out[-limit:]
+    return out
