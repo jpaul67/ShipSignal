@@ -169,6 +169,7 @@ FINDING_AREA = {
     "doc_ref_missing": "Freshness",
     "doc_predates_modules": "Freshness",
     "doc_written_once": "Freshness",
+    "doc_stale": "Freshness",
 }
 AREA_ORDER = ["Agent context", "Module docs", "Setup", "Integrity", "Freshness"]
 
@@ -186,6 +187,7 @@ FINDING_EFFORT = {
     "doc_ref_missing": "quick",
     "doc_predates_modules": "moderate",
     "doc_written_once": "moderate",
+    "doc_stale": "moderate",
 }
 
 
@@ -576,6 +578,37 @@ def run_detectors(root: Path, files, modules, agent_files, is_git):
                 f"{post_doc_churn} commits landed after it",
                 f"Skim {basename(doc)} for staleness — a doc untouched while "
                 "hundreds of commits landed after it is rarely still accurate"))
+
+        # B5: standalone living docs (CHANGELOG, ROADMAP, docs/*.md, …) that have
+        # fallen behind active development. These are the "other markdown that
+        # needs regular updates" the module-doc drift (section 5) and B1-B3 don't
+        # reach: not a module README, not an agent file. Churn-relative drift
+        # ONLY — flagged when many commits landed AFTER the doc's last edit, never
+        # mere calendar age (same honesty bar as B3). Surfaced as a warn so it
+        # reaches the fix list, but informational like B2/B3 (0 pts — doesn't move
+        # the freshness score) and capped so a doc-heavy repo can't drown the list.
+        B5_POST_EDIT_CHURN_THRESHOLD = 100
+        B5_MAX = 5
+        covered_docs = {m.readme_path for m in nonwaived if m.readme_path}
+        covered_docs |= set(agent_files)
+        loose: list[tuple[int, str, str]] = []  # (churn_since_edit, doc, last_edit)
+        for doc in files:
+            if ext_of(doc) not in {".md", ".markdown"} or doc in covered_docs:
+                continue
+            if any(seg in WAIVED_DIRS for seg in dir_of(doc).split("/")):
+                continue  # examples/fixtures/benchmarks — sample docs, not living docs
+            last_edit = gitinfo.last_commit_date(root, doc)
+            if not last_edit:
+                continue
+            churn = gitinfo.commits_since(root, last_edit)
+            if churn >= B5_POST_EDIT_CHURN_THRESHOLD:
+                loose.append((churn, doc, last_edit))
+        for churn, doc, last_edit in sorted(loose, reverse=True)[:B5_MAX]:
+            findings.append(_finding(
+                "doc_stale", "warn", doc,
+                f"{basename(doc)} last updated {last_edit}; {churn} commits have "
+                "landed since — likely behind the current code",
+                f"Skim {basename(doc)} and refresh anything the code has outgrown"))
 
     # mcp presence (conditional; resolution of referenced paths is a later increment)
     mcp_present = any(

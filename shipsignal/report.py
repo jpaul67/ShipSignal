@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime
 from html import escape as _esc
 
 from . import __version__, glossary
@@ -10,6 +11,36 @@ from .detectors import AREA_ORDER
 GRADE_COLOR = {"A": "#4c1", "B": "#97ca00", "C": "#dfb317", "D": "#fe7d37", "F": "#e05d44"}
 
 _SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _human_date(iso: str, *, with_year: bool = True) -> str:
+    """'2026-02-05' -> '5 Feb 2026' (or '5 Feb' when with_year=False). Falls
+    back to the raw string when it doesn't parse — never raises on bad input."""
+    try:
+        d = datetime.strptime(iso, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return iso
+    return f"{d.day} {d:%b %Y}" if with_year else f"{d.day} {d:%b}"
+
+
+def _human_range(a: str, b: str) -> str:
+    """A commit window as '5 Feb – 17 Jun 2026', dropping the repeated year on
+    the start when both ends share it. Falls back to 'a → b' on parse trouble."""
+    try:
+        da = datetime.strptime(a, "%Y-%m-%d")
+        db = datetime.strptime(b, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return f"{a} → {b}"
+    return f"{_human_date(a, with_year=da.year != db.year)} – {_human_date(b)}"
+
+
+def _human_ts(iso: str) -> str:
+    """'2026-06-20T22:19:22Z' -> '20 Jun 2026, 22:19 UTC'. Falls back to raw."""
+    try:
+        d = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError):
+        return iso
+    return f"{d.day} {d:%b %Y}, {d:%H:%M} UTC"
 
 
 def _tip(label: str, key: str) -> str:
@@ -33,15 +64,6 @@ def _bar(points, maximum, width: int = 16) -> str:
     filled = int(round(width * (points / maximum))) if maximum else 0
     filled = max(0, min(width, filled))
     return "█" * filled + "░" * (width - filled)
-
-
-def _sparkline(values: list[float], max_val: float | None = None) -> str:
-    if not values:
-        return ""
-    mx = max_val if max_val is not None else max(values)
-    if mx <= 0:
-        return _SPARK[0] * len(values)
-    return "".join(_SPARK[min(7, int(v / mx * 7))] for v in values)
 
 
 def _terminal_width(default: int = 80) -> int:
@@ -390,6 +412,55 @@ def _adoption_headline(adoption: dict) -> str:
             f"({adoption['ai_commits']}/{adoption['total_commits']} commits, lower bound)")
 
 
+# Honest framing for the delivery-health focus list: it mirrors the Readiness
+# fix backlog in shape, but the voice is deliberately softer — these are general
+# engineering-norm observations, never AI-attributed and never one-file "fixes".
+_DELIVERY_FOCUS_NOTE = ("General engineering norms — not AI-attributed; where "
+                        "delivery health has the most headroom, not a defect list.")
+
+
+def _delivery_focus(dh: dict, metrics: dict) -> list[dict]:
+    """Flagged Delivery-Health components → a short 'where to focus' list, the
+    delivery-side parallel to the Readiness fixes. Each item pulls the concrete
+    number behind the flag from ``metrics`` so the advice is specific, not
+    generic. Empty when nothing is flagged (or health wasn't scored)."""
+    if dh.get("status") != "scored":
+        return []
+    cs = metrics.get("change_shape", {})
+    q = metrics.get("quality", {})
+    p = metrics.get("people", {})
+    out: list[dict] = []
+    for c in dh["components"]:
+        if not c.get("flag"):
+            continue
+        cid = c["id"]
+        if cid == "change_size_discipline":
+            median = cs.get("median_lines")
+            large = cs.get("large_change_rate")
+            detail = (f"Median commit is {median:g} lines" if median is not None
+                      else "Commits run large")
+            if large:
+                detail += f"; {large:.0%} are large (400+ lines)"
+            out.append({"label": "Change size", "detail": f"{detail}. Smaller, more "
+                        "frequent commits are safer to review, test, and revert."})
+        elif cid == "test_discipline":
+            ratio = q.get("test_to_code_ratio")
+            frac = f"{ratio:.0%}" if ratio is not None else "few"
+            out.append({"label": "Test discipline", "detail": f"Only {frac} of "
+                        "code-touching commits also touch tests. Pairing changes "
+                        "with tests keeps coverage moving with the code."})
+        elif cid == "knowledge_distribution":
+            share = p.get("top_author_share")
+            bus = p.get("bus_factor")
+            who = (f"One author owns {share:.0%} of commits" if share is not None
+                   else "Authorship is concentrated")
+            if bus:
+                who += f" (bus factor {bus})"
+            out.append({"label": "Knowledge distribution", "detail": f"{who}. "
+                        "Spreading review and authorship reduces key-person risk."})
+    return out
+
+
 def render_impact(result: dict) -> str:
     L: list[str] = ["", f"  ShipSignal impact — {result['repo']}"]
     if result.get("error"):
@@ -467,6 +538,12 @@ def render_impact(result: dict) -> str:
         d = dh["descriptive"]
         L.append(f"   context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
                  f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors")
+        focus = _delivery_focus(dh, result["metrics"])
+        if focus:
+            L.append("")
+            L.append("   Where to focus (general eng norms, not AI-attributed):")
+            for it in focus:
+                L.append(f"    • {it['label']} — {it['detail']}")
         L.append("")
 
     # --- Before/after AI Enablement delta (the conditional bonus) ---
@@ -614,6 +691,11 @@ def render_impact_markdown(result: dict) -> str:
         L += ["", f"*Context (not scored — too noisy to rank health by): fix/revert "
               f"{d['fix_revert_rate']:.0%}, {d['commits_per_week']:g} commits/wk, "
               f"{d['contributors']} contributors.*", ""]
+        focus = _delivery_focus(dh, result["metrics"])
+        if focus:
+            L += [f"### Where to focus ({len(focus)})", ""]
+            L += [f"- **{it['label']}** — {it['detail']}" for it in focus]
+            L += ["", f"_<sub>{_DELIVERY_FOCUS_NOTE}</sub>_", ""]
     else:
         L += ["## Delivery Health", "",
               f"*Insufficient data — {dh['reason']}.*", ""]
@@ -728,7 +810,11 @@ def render_impact_html(result: dict) -> str:
     rd = result.get("readiness")
     pct = ad["ai_coauthor_share"] * 100
     series_rates = [s[1] for s in ad.get("weekly_series", [])]
-    spark = _esc(_sparkline(series_rates, max_val=1.0)) if series_rates else ""
+    # Recent pulse only — mirror the CLI's last-60w window so the strip never
+    # overflows on old repos; the full adoption arc lives in the Trajectory chart.
+    spark_window = series_rates[-60:]
+    spark = _esc(_spark_series(spark_window, max_val=1.0)) if spark_window else ""
+    spark_caption = f"last {len(spark_window)}w · 0–100%" if spark_window else ""
     an = result.get("analysis") or {}
     _bits = []
     if an.get("merges_excluded") or an.get("maintenance_bots_excluded"):
@@ -736,7 +822,7 @@ def render_impact_html(result: dict) -> str:
                      f"{an['maintenance_bots_excluded']} maintenance-bot")
     if an.get("ai_agent_commits"):
         _bits.append(f"{an['ai_agent_commits']} AI-agent counted as AI")
-    excl_html = (" · <span class='hint'>" + " · ".join(_bits) + "</span>") if _bits else ""
+    excl_chip = (f"<span class='chip muted'>{_esc(' · '.join(_bits))}</span>") if _bits else ""
 
     # --- three headline cards ---
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
@@ -772,9 +858,16 @@ def render_impact_html(result: dict) -> str:
         d = dh["descriptive"]
         ctx = (f"<p class='hint'>Context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
                f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors.</p>")
+        focus = _delivery_focus(dh, result["metrics"])
+        focus_html = ""
+        if focus:
+            items = "".join(f"<li><b>{_esc(it['label'])}</b> — {_esc(it['detail'])}</li>"
+                            for it in focus)
+            focus_html = (f"<h3>Where to focus</h3><ul class='focus'>{items}</ul>"
+                          f"<p class='hint'>{_esc(_DELIVERY_FOCUS_NOTE)}</p>")
         health_block = (f"<h2>{_tip('Delivery Health', 'delivery_health')}</h2>"
                         f"<p class='hint'>{_esc(glossary.short('delivery_health'))}</p>"
-                        f"{rows}{ctx}")
+                        f"{rows}{ctx}{focus_html}")
     else:
         health_block = (f"<h2>{_tip('Delivery Health', 'delivery_health')}</h2>"
                         f"<div class='withheld'>Insufficient data — {_esc(dh['reason'])}.</div>")
@@ -830,7 +923,12 @@ def render_impact_html(result: dict) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>
 body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
-h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
+h1{{font-size:24px;margin:0 0 10px;font-weight:700}}.sub{{color:#888;margin-bottom:18px}}
+.kicker{{color:#999;font-size:12px;letter-spacing:.04em;margin-bottom:3px}}
+.chips{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}}
+.chip{{background:#f2f4f7;border-radius:6px;padding:3px 10px;font-size:13px;color:#555}}
+.chip.muted{{color:#999;background:#f7f7f8}}
+.gen{{color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px;margin-bottom:20px}}
 .cards{{display:flex;gap:12px;margin:16px 0 24px}}
 .card{{flex:1;background:#fafafa;border-radius:8px;padding:14px 16px}}
 .clabel{{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
@@ -855,9 +953,13 @@ h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .howto dt{{font-weight:600;margin-top:8px}}.howto dd{{margin:2px 0 0;color:#555}}
 .caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
+h3{{font-size:13px;margin:18px 0 6px;color:#444}}
+.focus{{margin:6px 0;padding-left:18px}}.focus li{{margin:4px 0;color:#444}}
 </style></head><body>
-<h1>ShipSignal — AI impact</h1>
-<div class="sub">{_esc(result['repo'])} · {_esc(w['first_commit'])} → {_esc(w['last_commit'])} · {w['weeks']} weeks · {ad['total_commits']} dev commits{excl_html}</div>
+<div class="kicker">ShipSignal · AI impact audit</div>
+<h1>{_esc(result['repo'])}</h1>
+<div class="chips"><span class="chip">{_esc(_human_range(w['first_commit'], w['last_commit']))}</span><span class="chip">{w['weeks']:g} weeks</span><span class="chip">{ad['total_commits']} dev commits</span>{excl_chip}</div>
+<div class="gen">Generated {_esc(_human_ts(result['scanned_at']))} · shipsignal v{__version__}</div>
 
 <div class="cards">{cards}</div>
 
@@ -868,7 +970,7 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
   <span class="hint">({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)</span><br>
   {("Adoption date: <code>" + _esc(ad['adoption_date']) + "</code>") if ad.get('adoption_date') else "<span class='hint'>No sustained adoption window detected.</span>"}
   {breadth_html}
-  {("<br>Rate / week: <span class='spark'>" + spark + "</span>") if spark else ""}
+  {("<br>Rate / week: <span class='spark'>" + spark + "</span> <span class='hint'>" + spark_caption + "</span>") if spark else ""}
   <div class="hint" style="margin-top:6px">{_esc(glossary.short('ai_adoption'))}</div>
 </div>
 
@@ -879,7 +981,6 @@ h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 {traj_block}
 
 <div class="caveat"><b>Attribution caveat.</b> {_esc(result['attribution_caveat'])}</div>
-<p><sub>shipsignal v{__version__} · {_esc(result['scanned_at'])}</sub></p>
 </body></html>"""
 
 

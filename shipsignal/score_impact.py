@@ -23,7 +23,8 @@ from .scoring import score_scan
 # Detectors whose findings are informational — they surface real desync but
 # don't feed the 0–100 model (see the doc-tech-debt spec: B1/B2/B3 are
 # findings-only; only B4 graded drift moves doc_freshness).
-_INFORMATIONAL = {"doc_ref_missing", "doc_predates_modules", "doc_written_once"}
+_INFORMATIONAL = {"doc_ref_missing", "doc_predates_modules", "doc_written_once",
+                  "doc_stale"}
 
 
 def _resolved_metrics(finding: dict, metrics: dict) -> dict | None:

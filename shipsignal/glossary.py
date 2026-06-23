@@ -135,8 +135,10 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "the staleness threshold (180d strict / 365d gentle for agent files) "
                "grows — 0–3mo past = 85%, 3–6mo = 50%, 6–12mo = 20%, 12mo+ = 0%. "
                "Also surfaces (as fixes, not score) referenced-but-missing paths, "
-               "agent files that predate later modules, and docs untouched across "
-               "≥100 commits. Never flags age alone. Needs git history. 12 pts.",
+               "agent files that predate later modules, and any living doc — module "
+               "READMEs, agent files, or standalone markdown (CHANGELOG, docs/…) — "
+               "left untouched while ≥100 commits landed after it. Never flags age "
+               "alone. Needs git history. 12 pts.",
     },
 }
 
