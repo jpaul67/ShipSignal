@@ -1,4 +1,5 @@
 """Smoke + unit tests (stdlib unittest — no third-party dep)."""
+import os
 import subprocess
 import tempfile
 import unittest
@@ -380,14 +381,14 @@ def _git_init_repo(d: Path):
     """Initialize a tiny git repo with deterministic identity. Returns the dir."""
     env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
-    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env={**env, "PATH": ""})
-    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env={**env, "PATH": ""})
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})
     return env
 
 
 def _git_commit(d: Path, env: dict, message: str, date: str):
     """Commit all changes with a fixed author + commit date (YYYY-MM-DD)."""
-    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": ""}
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message], cwd=d, check=True, env=e)
 

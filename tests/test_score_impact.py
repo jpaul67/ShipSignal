@@ -1,6 +1,7 @@
 """Points-at-stake / finding-enrichment tests (Feature #1 + #5, v0.6.2)
 + cross-detector specificity, snippets, and grouped renderer (v0.6.3)."""
 import html.parser
+import os
 import subprocess
 import tempfile
 import unittest
@@ -81,14 +82,14 @@ class TestPointsAtStake(unittest.TestCase):
 
 def _git_init(d: Path):
     env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
-           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t", "PATH": ""}
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t", "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env=env)
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env=env)
     return env
 
 
 def _git_commit(d: Path, env: dict, msg: str, date: str):
-    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": ""}
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     subprocess.run(["git", "commit", "-q", "-m", msg], cwd=d, check=True, env=e)
 
@@ -174,7 +175,7 @@ class TestSpecializeFix(unittest.TestCase):
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True,
                        env={"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
                             "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t",
-                            "PATH": ""})
+                            "PATH": os.environ.get("PATH", "")})
         # README is substantial; package.json has a test script; no agent file.
         # Lots of code files so the small-repo n/a path doesn't fire.
         (d / "README.md").write_text("# r\n" * 30, encoding="utf-8")
@@ -186,7 +187,7 @@ class TestSpecializeFix(unittest.TestCase):
         env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t",
                "GIT_AUTHOR_DATE": "2026-05-01 12:00:00",
-               "GIT_COMMITTER_DATE": "2026-05-01 12:00:00", "PATH": ""}
+               "GIT_COMMITTER_DATE": "2026-05-01 12:00:00", "PATH": os.environ.get("PATH", "")}
         subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=env)
         subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=d, check=True, env=env)
         result = scanner.scan(d, repo_label="t")
