@@ -16,5 +16,6 @@ This repo's canonical agent guide is [CLAUDE.md](CLAUDE.md) — read it first. `
 - Detectors must never crash on bad input (catch and skip); a non-git dir still scans.
 - Keep the false-positive guards in [shipsignal/detectors.py](shipsignal/detectors.py) intact.
 - Clone treeless (`--filter=blob:none`), never shallow — freshness needs history.
+- Commit as `jpaul67 <5659943+jpaul67@users.noreply.github.com>` — the repo's local git config is already set to this; don't override it.
 
 See [CLAUDE.md](CLAUDE.md) and [shipsignal/README.md](shipsignal/README.md) for detail.

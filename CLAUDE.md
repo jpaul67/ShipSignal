@@ -45,6 +45,7 @@ Pipelines:
 - **The known-AI registry** ([impact.py](shipsignal/impact.py): `AI_TOOL_ALIASES`) is a versioned constant — extend deliberately, like the Readiness `SCORE_CAPS`.
 - **Clones are full-history, never `--depth`** (freshness, adoption detection, and the before/after delta need the whole graph). Readiness clones **treeless** (`--filter=blob:none`); Impact/`report` clone **with blobs** (`treeless=False`) because `git log --numstat` triggers a per-commit blob fetch on a treeless clone and crawls on big repos.
 - **Tests are stdlib `unittest`** in `tests/`. Run them before committing.
+- **Commit identity.** Author commits as `jpaul67 <5659943+jpaul67@users.noreply.github.com>`, the project's canonical GitHub identity. The repo's local git config is already set to this — don't override it with a global or per-machine identity.
 
 ## Where to read next
 
