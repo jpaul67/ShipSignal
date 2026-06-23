@@ -14,9 +14,9 @@ keywords = ["ai", "agents", "impact", "delivery", "readiness", "git", "static-an
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/jpaul67/shipsignal"
-Repository = "https://github.com/jpaul67/shipsignal"
-Issues = "https://github.com/jpaul67/shipsignal/issues"
+Homepage = "https://github.com/jpaul67/ShipSignal"
+Repository = "https://github.com/jpaul67/ShipSignal"
+Issues = "https://github.com/jpaul67/ShipSignal/issues"
 
 [project.scripts]
 shipsignal = "shipsignal.cli:main"
