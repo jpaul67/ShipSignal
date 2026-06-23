@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import re
 import shutil
@@ -220,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
         prog="shipsignal",
         description="AI readiness & impact scanner — local, read-only.",
     )
+    try:
+        _version = importlib.metadata.version("shipsignal")
+    except importlib.metadata.PackageNotFoundError:
+        _version = "0+unknown"
+    parser.add_argument("--version", action="version", version=f"shipsignal {_version}")
     sub = parser.add_subparsers(dest="cmd")
 
     scan_p = sub.add_parser("scan", help="readiness lens — is the repo set up for agents?")
