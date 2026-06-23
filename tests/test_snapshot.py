@@ -28,7 +28,7 @@ def _git_init(d: Path):
 
 
 def _git_commit(d: Path, env: dict, msg: str, date: str):
-    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": ""}
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     subprocess.run(["git", "commit", "-q", "-m", msg], cwd=d, check=True, env=e)
 

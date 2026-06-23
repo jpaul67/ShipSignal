@@ -85,6 +85,13 @@ def _has_arch_doc(root: Path, rootfiles: set[str], files: list[str]) -> bool:
 def _rt(root: Path, rel: str) -> str:
     try:
         return (root / rel).read_text(encoding="utf-8", errors="ignore")
+    except FileNotFoundError:
+        # rootfiles are lowercased; on case-sensitive FS, resolve to actual name.
+        target = (root / rel).name.lower()
+        for p in (root / rel).parent.iterdir():
+            if p.name.lower() == target:
+                return p.read_text(encoding="utf-8", errors="ignore")
+        return ""
     except Exception:
         return ""
 
