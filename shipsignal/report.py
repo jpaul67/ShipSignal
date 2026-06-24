@@ -481,7 +481,7 @@ def _squash_caveat(ad: dict) -> str | None:
 def render_impact(result: dict) -> str:
     L: list[str] = ["", f"  ShipSignal impact — {result['repo']}"]
     if result.get("error"):
-        L += [f"  error: {result['error']}", ""]
+        L += [f"  AI Adoption / Delivery Health: {result['error']}", ""]
         return "\n".join(L)
 
     w = result["window"]
@@ -826,11 +826,63 @@ def _svg_trajectory(traj: dict, adoption_date: str | None) -> str:
             f"{xlabels}{legend}</svg>")
 
 
+_REPORT_CSS = (
+    "body{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;"
+    "margin:40px auto;padding:0 20px;color:#1a1a1a}"
+    "h1{font-size:24px;margin:0 0 10px;font-weight:700}.sub{color:#888;margin-bottom:18px}"
+    ".kicker{color:#999;font-size:12px;letter-spacing:.04em;margin-bottom:3px}"
+    ".chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}"
+    ".chip{background:#f2f4f7;border-radius:6px;padding:3px 10px;font-size:13px;color:#555}"
+    ".chip.muted{color:#999;background:#f7f7f8}"
+    ".gen{color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px;margin-bottom:20px}"
+    ".cards{display:flex;gap:12px;margin:16px 0 24px}"
+    ".card{flex:1;background:#fafafa;border-radius:8px;padding:14px 16px}"
+    ".clabel{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}"
+    ".cval{font-size:22px;font-weight:700;margin:4px 0}"
+    ".cval .pct{font-size:14px;color:#888;font-weight:400;margin-left:6px}"
+    ".csub{color:#777;font-size:12px}"
+    ".gchip{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;"
+    "font-size:14px;margin-left:6px;vertical-align:middle}"
+    ".score{font-size:40px;font-weight:700}.slash{color:#bbb;font-size:22px}"
+    ".row{display:flex;align-items:center;margin:6px 0}.cat{width:200px;color:#555}"
+    ".bar{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}"
+    ".bar span{display:block;height:100%;background:#4c1}"
+    ".bar.na{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}"
+    ".num{width:120px;text-align:right;color:#333}"
+    ".flag{color:#b8860b;font-weight:600;font-size:12px}"
+    ".spark{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px;word-break:break-all}"
+    ".headline{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;"
+    "border-radius:0 6px 6px 0;margin:14px 0}"
+    ".withheld{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;"
+    "border-radius:0 6px 6px 0;margin:14px 0}"
+    ".hint{color:#666;font-size:13px;font-weight:400}"
+    ".tip{border-bottom:1px dotted #bbb;cursor:help}"
+    ".howto{margin:4px 0 20px;font-size:13px;background:#fafafa;border-radius:8px;padding:8px 14px}"
+    ".howto summary{cursor:pointer;color:#4477dd;font-weight:600}"
+    ".howto dt{font-weight:600;margin-top:8px}.howto dd{margin:2px 0 0;color:#555}"
+    ".caveat{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;"
+    "border-radius:0 6px 6px 0;margin:24px 0;color:#444}"
+    "h2{font-size:15px;margin-top:28px}sub{color:#aaa}"
+    "h3{font-size:13px;margin:18px 0 6px;color:#444}"
+    ".focus{margin:6px 0;padding-left:18px}.focus li{margin:4px 0;color:#444}"
+)
+
+
 def render_impact_html(result: dict) -> str:
     if result.get("error"):
-        return (f"<!doctype html><meta charset='utf-8'><title>impact error</title>"
-                f"<h1>ShipSignal impact — {_esc(result['repo'])}</h1>"
-                f"<p><b>Error:</b> {_esc(result['error'])}</p>")
+        return (
+            f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            f'<title>AI impact — {_esc(result["repo"])}</title>'
+            f'<style>{_REPORT_CSS}</style></head><body>'
+            f'<div class="kicker">ShipSignal · AI impact audit</div>'
+            f'<h1>{_esc(result["repo"])}</h1>'
+            f'<div class="gen">Generated {_esc(_human_ts(result["scanned_at"]))} · '
+            f'shipsignal v{__version__}</div>'
+            f'<div class="withheld"><b>No git history</b> — '
+            f'AI Adoption and Delivery Health require commit history to compute. '
+            f'Readiness scan (static analysis) is shown below.</div>'
+            f'</body></html>'
+        )
     w = result["window"]
     ad = result["adoption"]
     dh = result["delivery_health"]
@@ -973,46 +1025,7 @@ def render_impact_html(result: dict) -> str:
     )
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>AI impact — {_esc(result['repo'])}</title><style>
-body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;
-margin:40px auto;padding:0 20px;color:#1a1a1a}}
-h1{{font-size:24px;margin:0 0 10px;font-weight:700}}.sub{{color:#888;margin-bottom:18px}}
-.kicker{{color:#999;font-size:12px;letter-spacing:.04em;margin-bottom:3px}}
-.chips{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}}
-.chip{{background:#f2f4f7;border-radius:6px;padding:3px 10px;font-size:13px;color:#555}}
-.chip.muted{{color:#999;background:#f7f7f8}}
-.gen{{color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px;margin-bottom:20px}}
-.cards{{display:flex;gap:12px;margin:16px 0 24px}}
-.card{{flex:1;background:#fafafa;border-radius:8px;padding:14px 16px}}
-.clabel{{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
-.cval{{font-size:22px;font-weight:700;margin:4px 0}}
-.cval .pct{{font-size:14px;color:#888;font-weight:400;margin-left:6px}}
-.csub{{color:#777;font-size:12px}}
-.gchip{{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;
-font-size:14px;margin-left:6px;vertical-align:middle}}
-.score{{font-size:40px;font-weight:700}}.slash{{color:#bbb;font-size:22px}}
-.row{{display:flex;align-items:center;margin:6px 0}}.cat{{width:200px;color:#555}}
-.bar{{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}}
-.bar span{{display:block;height:100%;background:#4c1}}
-.bar.na{{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}}
-.num{{width:120px;text-align:right;color:#333}}
-.flag{{color:#b8860b;font-weight:600;font-size:12px}}
-.spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px;word-break:break-all}}
-.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;
-border-radius:0 6px 6px 0;margin:14px 0}}
-.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;
-border-radius:0 6px 6px 0;margin:14px 0}}
-.hint{{color:#666;font-size:13px;font-weight:400}}
-.tip{{border-bottom:1px dotted #bbb;cursor:help}}
-.howto{{margin:4px 0 20px;font-size:13px;background:#fafafa;border-radius:8px;padding:8px 14px}}
-.howto summary{{cursor:pointer;color:#4477dd;font-weight:600}}
-.howto dt{{font-weight:600;margin-top:8px}}.howto dd{{margin:2px 0 0;color:#555}}
-.caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;
-border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
-h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
-h3{{font-size:13px;margin:18px 0 6px;color:#444}}
-.focus{{margin:6px 0;padding-left:18px}}.focus li{{margin:4px 0;color:#444}}
-</style></head><body>
+<title>AI impact — {_esc(result['repo'])}</title><style>{_REPORT_CSS}</style></head><body>
 <div class="kicker">ShipSignal · AI impact audit</div>
 <h1>{_esc(result['repo'])}</h1>
 <div class="chips">{chips_html}</div>
