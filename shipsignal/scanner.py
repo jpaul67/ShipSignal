@@ -2,7 +2,7 @@
 -> enrich findings (points-at-stake, effort, area)."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import detectors, gitinfo, score_impact, scoring, setupcheck, snippets
@@ -102,7 +102,7 @@ def scan(root: Path, repo_label: str | None = None) -> dict:
         "schema_version": "0.1",
         "repo": repo_label or root.name,
         "commit_sha": gitinfo.head_sha(root) if is_git else None,
-        "scanned_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "scanned_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "score": score,
         "grade": grade,
         "categories": [c.__dict__ for c in categories],

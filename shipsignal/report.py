@@ -261,7 +261,8 @@ def _render_grouped_fixes_html(findings: list[dict]) -> str:
                     f"<span class='fix'>→ {_esc(it['fix'])}</span>")
             if it.get("snippet"):
                 base += (
-                    "<details class='snippet'><summary>Starter — copy + fill in placeholders</summary>"
+                    "<details class='snippet'><summary>Starter — copy + fill in "
+                    "placeholders</summary>"
                     f"<pre>{_esc(it['snippet'])}</pre></details>"
                 )
             items_html.append(base + "</li>")
@@ -321,7 +322,8 @@ def render(result: dict) -> str:
 def _cat_rows(result):
     for c in result["categories"]:
         if c["status"] == "scored":
-            yield c["id"], f"{c['points']:g}/{c['max']:g}", 100 * c["points"] / c["max"] if c["max"] else 0
+            pct = 100 * c["points"] / c["max"] if c["max"] else 0
+            yield c["id"], f"{c['points']:g}/{c['max']:g}", pct
         else:
             yield c["id"], c["status"], None
 
@@ -349,7 +351,9 @@ def render_markdown(result: dict) -> str:
                 L.append(f"- **{_fix_path(it)}** — {it['evidence']}{_fix_meta(it)}  \n"
                          f"  → {it['fix']}")
                 if it.get("snippet"):
-                    L += ["", "  <details><summary>Starter (copy + fill in the placeholders)</summary>",
+                    L += ["",
+                          ("  <details><summary>Starter (copy + fill in the placeholders)"
+                           "</summary>"),
                           "", "  ```markdown", _indent(it["snippet"], "  "),
                           "  ```", "  </details>", ""]
             L.append("")
@@ -375,20 +379,24 @@ def render_html(result: dict) -> str:
                  "<p>None — nicely set up. ✓</p>"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI readiness — {_esc(result['repo'])}</title><style>
-body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
+body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;
+margin:40px auto;padding:0 20px;color:#1a1a1a}}
 h1{{font-size:18px;margin-bottom:2px}}.sub{{color:#888;margin-bottom:18px}}
 .score{{font-size:48px;font-weight:700}}.slash{{color:#bbb;font-size:24px}}
-.grade{{display:inline-block;color:#fff;background:{color};border-radius:6px;padding:2px 12px;font-size:20px;vertical-align:middle;margin-left:10px}}
+.grade{{display:inline-block;color:#fff;background:{color};border-radius:6px;
+padding:2px 12px;font-size:20px;vertical-align:middle;margin-left:10px}}
 .row{{display:flex;align-items:center;margin:6px 0}}.cat{{width:170px;color:#555}}
 .bar{{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}}
 .bar span{{display:block;height:100%;background:{color}}}
 .bar.na{{background:repeating-linear-gradient(45deg,#eee,#eee 4px,#f6f6f6 4px,#f6f6f6 8px)}}
 .num{{width:74px;text-align:right;color:#333}}h2{{font-size:15px;margin-top:28px}}
-h3.area{{font-size:13px;margin:16px 0 4px;color:#4477dd;text-transform:uppercase;letter-spacing:.05em}}
+h3.area{{font-size:13px;margin:16px 0 4px;color:#4477dd;
+text-transform:uppercase;letter-spacing:.05em}}
 ul{{padding-left:18px}}li{{margin:8px 0}}.fix{{color:#666}}
 details.snippet{{margin-top:6px;font-size:12px}}
 details.snippet summary{{cursor:pointer;color:#4477dd}}
-details.snippet pre{{background:#fafafa;border:1px solid #eee;padding:10px;border-radius:4px;overflow-x:auto;white-space:pre-wrap}}
+details.snippet pre{{background:#fafafa;border:1px solid #eee;padding:10px;
+border-radius:4px;overflow-x:auto;white-space:pre-wrap}}
 .hint{{color:#666;font-size:12px}}
 sub{{color:#aaa}}
 </style></head><body>
@@ -461,6 +469,15 @@ def _delivery_focus(dh: dict, metrics: dict) -> list[dict]:
     return out
 
 
+def _squash_caveat(ad: dict) -> str | None:
+    """One-line caveat when a squash workflow likely undercounts adoption, else None."""
+    if not ad.get("squash_suspected"):
+        return None
+    how = "declared" if ad.get("squash_source") == "declared" else "detected"
+    return (f"squash-merge workflow {how} — Co-Authored-By trailers are dropped on squash, "
+            f"so AI adoption is undercounted; treat it as a floor, not a measurement")
+
+
 def render_impact(result: dict) -> str:
     L: list[str] = ["", f"  ShipSignal impact — {result['repo']}"]
     if result.get("error"):
@@ -471,6 +488,7 @@ def render_impact(result: dict) -> str:
     ad = result["adoption"]
     dh = result["delivery_health"]
     rd = result.get("readiness")
+    sq = _squash_caveat(ad)
     L.append(f"  {w['first_commit']} → {w['last_commit']}  "
              f"({w['weeks']} weeks, {ad['total_commits']} dev commits)")
     an = result.get("analysis") or {}
@@ -485,7 +503,8 @@ def render_impact(result: dict) -> str:
     tool = ""
     if ad.get("per_tool"):
         tool = "  (" + ", ".join(f"{k} {v}" for k, v in ad["per_tool"].items()) + ")"
-    L.append(f"  AI Adoption      {ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%{tool}")
+    L.append(f"  AI Adoption      {ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%{tool}"
+             f"{'  ! floor (squash)' if sq else ''}")
     if dh["status"] == "scored":
         flags = [c["flag"] for c in dh["components"] if c.get("flag")]
         flag_s = ("   ! " + "; ".join(flags)) if flags else ""
@@ -502,6 +521,8 @@ def render_impact(result: dict) -> str:
     if ad.get("adoption_date"):
         L.append(f"   adoption date {ad['adoption_date']} "
                  f"({'auto' if ad['adoption_auto_detected'] else 'override'})")
+    if sq:
+        L.append(f"   ! {sq}")
     # Feature C: team-level breadth — aggregate only, with the non-goal line.
     br = ad.get("breadth") or {}
     if br.get("status") == "scored":
@@ -633,12 +654,13 @@ def render_impact_markdown(result: dict) -> str:
     dh = result["delivery_health"]
     rd = result.get("readiness")
     m = result["metrics"]
-    f, cs, q, p = m["flow"], m["change_shape"], m["quality"], m["people"]
+    p = m["people"]
 
     health_cell = (f"{dh['score']}/100 · {dh['grade']}" if dh["status"] == "scored"
                    else f"— ({dh['reason']})")
     ready_cell = f"{rd['score']}/100 · {rd['grade']}" if rd else "—"
-    tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())) if ad.get("per_tool") else "—"
+    tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
+             if ad.get("per_tool") else "—")
 
     an = result.get("analysis") or {}
     _parts = []
@@ -652,7 +674,8 @@ def render_impact_markdown(result: dict) -> str:
          f"**{w['first_commit']} → {w['last_commit']} · {w['weeks']} weeks · "
          f"{ad['total_commits']} dev commits**{excl}", "",
          "| | Result | |", "|---|---|---|",
-         f"| **AI Adoption** | {ad['level']} · {ad['ai_coauthor_share'] * 100:.0f}% | {tools} |",
+         f"| **AI Adoption** | {ad['level']} · {ad['ai_coauthor_share'] * 100:.0f}%"
+         f"{' ⚠' if ad.get('squash_suspected') else ''} | {tools} |",
          f"| **Delivery Health** | {health_cell} | general eng norms, not AI-attributed |",
          f"| **Readiness** | {ready_cell} | static repo state |", ""]
 
@@ -664,6 +687,9 @@ def render_impact_markdown(result: dict) -> str:
           f"- **{ad['level']} — {ad['ai_coauthor_share'] * 100:.1f}%** "
           f"({ad['ai_commits']}/{ad['total_commits']} commits), a **lower bound** "
           "(squash-merges drop trailers)."]
+    _sq = _squash_caveat(ad)
+    if _sq:
+        L.append(f"- ⚠ **{_sq[:1].upper() + _sq[1:]}.**")
     if ad.get("adoption_date"):
         L.append(f"- Adoption date: `{ad['adoption_date']}` "
                  f"({'auto-detected' if ad['adoption_auto_detected'] else 'override'})")
@@ -766,7 +792,7 @@ def _svg_trajectory(traj: dict, adoption_date: str | None) -> str:
         pts = [None if p[key] is None else (xc(i), yc(float(p[key])))
                for i, p in enumerate(periods)]
         out = ""
-        for a, b in zip(pts, pts[1:]):
+        for a, b in zip(pts, pts[1:], strict=False):
             if a and b:  # only connect adjacent present points — gaps break the line
                 out += (f"<line x1='{a[0]:.1f}' y1='{a[1]:.1f}' x2='{b[0]:.1f}' "
                         f"y2='{b[1]:.1f}' stroke='{color}' stroke-width='2'/>")
@@ -792,7 +818,8 @@ def _svg_trajectory(traj: dict, adoption_date: str | None) -> str:
     legend = (f"<circle cx='{Lm + 6}' cy='{H - 26}' r='3' fill='#4477dd'/>"
               f"<text x='{Lm + 14}' y='{H - 23}' font-size='10' fill='#555'>adoption %</text>"
               f"<circle cx='{Lm + 104}' cy='{H - 26}' r='3' fill='#4c1'/>"
-              f"<text x='{Lm + 112}' y='{H - 23}' font-size='10' fill='#555'>delivery health</text>")
+              f"<text x='{Lm + 112}' y='{H - 23}' font-size='10' fill='#555'>"
+              f"delivery health</text>")
     return (f"<svg viewBox='0 0 {W} {H}' width='100%' style='max-width:680px' "
             f"xmlns='http://www.w3.org/2000/svg' font-family='sans-serif'>{grid}{marker}"
             f"{series('adoption_pct', '#4477dd')}{series('health_score', '#4c1')}"
@@ -808,6 +835,7 @@ def render_impact_html(result: dict) -> str:
     ad = result["adoption"]
     dh = result["delivery_health"]
     rd = result.get("readiness")
+    sq = _squash_caveat(ad)
     pct = ad["ai_coauthor_share"] * 100
     series_rates = [s[1] for s in ad.get("weekly_series", [])]
     # Recent pulse only — mirror the CLI's last-60w window so the strip never
@@ -830,7 +858,8 @@ def render_impact_html(result: dict) -> str:
     cards = (f"<div class='card' style='border-top:3px solid #4477dd'>"
              f"<div class='clabel'>{_tip('AI Adoption', 'ai_adoption')}</div>"
              f"<div class='cval'>{ad['level']}<span class='pct'>{pct:.0f}%</span></div>"
-             f"<div class='csub'>{_esc(tools)} · lower bound</div></div>")
+             f"<div class='csub'>{_esc(tools)} · lower bound"
+             f"{' · ⚠ squash' if sq else ''}</div></div>")
     if dh["status"] == "scored":
         cards += _stat_card("Delivery Health", f"{dh['score']}/100 ", dh["grade"],
                             "general eng norms", key="delivery_health")
@@ -853,7 +882,8 @@ def render_impact_html(result: dict) -> str:
                          f"<div class='num'>{_esc(c['status'])}</div></div>")
             else:
                 rows += (f"<div class='row'><div class='cat'>{_tip(c['id'], c['id'])}</div>"
-                         f"<div class='bar'><span style='width:{c['score_frac'] * 100:.0f}%'></span></div>"
+                         f"<div class='bar'><span style='width:"
+                         f"{c['score_frac'] * 100:.0f}%'></span></div>"
                          f"<div class='num'>{c['score_frac'] * 100:.0f}% {flag}</div></div>")
         d = dh["descriptive"]
         ctx = (f"<p class='hint'>Context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
@@ -880,7 +910,8 @@ def render_impact_html(result: dict) -> str:
             f"<div class='num'>{pl['pts']:g}/{pl['max']:g}</div></div>"
             if pl.get("pts") is not None else
             f"<div class='row'><div class='cat'>{_esc(pl['id'])}</div>"
-            f"<div class='bar na'></div><div class='num'>{_esc(pl.get('status', 'n/a'))}</div></div>"
+            f"<div class='bar na'></div>"
+            f"<div class='num'>{_esc(pl.get('status', 'n/a'))}</div></div>"
             for pl in result.get("pillars", [])
         )
         bonus_block = (f"<h2>{_tip('Before/after AI Enablement', 'before_after')}</h2>"
@@ -912,17 +943,39 @@ def render_impact_html(result: dict) -> str:
             f"<br>{_tip('Breadth', 'adoption_breadth')}: {br['breadth_pct']:.0f}% — "
             f"{br['ai_contributors']} of {br['active_contributors']} active "
             f"contributors{trend_html}"
-            f"<br><span class='hint'>Team-level only — ShipSignal does not score individuals.</span>"
+            f"<br><span class='hint'>Team-level only — ShipSignal does not score "
+            f"individuals.</span>"
         )
     elif br.get("status") == "n/a":
         breadth_html = (f"<br>{_tip('Breadth', 'adoption_breadth')}: n/a — "
-                        f"<span class='hint'>{_esc(br.get('reason', 'too few contributors'))}</span>")
+                        f"<span class='hint'>"
+                        f"{_esc(br.get('reason', 'too few contributors'))}</span>")
     else:
         breadth_html = ""
 
+    chips_html = (
+        f'<span class="chip">{_esc(_human_range(w["first_commit"], w["last_commit"]))}</span>'
+        f'<span class="chip">{w["weeks"]:g} weeks</span>'
+        f'<span class="chip">{ad["total_commits"]} dev commits</span>{excl_chip}'
+    )
+    adoption_line = (
+        f"Adoption date: <code>{_esc(ad['adoption_date'])}</code>"
+        if ad.get("adoption_date")
+        else "<span class='hint'>No sustained adoption window detected.</span>"
+    )
+    rate_line = (
+        f"<br>Rate / week: <span class='spark'>{spark}</span> "
+        f"<span class='hint'>{spark_caption}</span>"
+    ) if spark else ""
+    squash_line = (
+        f"<div class='hint' style='color:#b86a2c;margin-top:6px'>⚠ {_esc(sq)}</div>"
+        if sq else ""
+    )
+
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>
-body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
+body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;
+margin:40px auto;padding:0 20px;color:#1a1a1a}}
 h1{{font-size:24px;margin:0 0 10px;font-weight:700}}.sub{{color:#888;margin-bottom:18px}}
 .kicker{{color:#999;font-size:12px;letter-spacing:.04em;margin-bottom:3px}}
 .chips{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}}
@@ -935,7 +988,8 @@ h1{{font-size:24px;margin:0 0 10px;font-weight:700}}.sub{{color:#888;margin-bott
 .cval{{font-size:22px;font-weight:700;margin:4px 0}}
 .cval .pct{{font-size:14px;color:#888;font-weight:400;margin-left:6px}}
 .csub{{color:#777;font-size:12px}}
-.gchip{{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;font-size:14px;margin-left:6px;vertical-align:middle}}
+.gchip{{display:inline-block;color:#fff;border-radius:5px;padding:0 8px;
+font-size:14px;margin-left:6px;vertical-align:middle}}
 .score{{font-size:40px;font-weight:700}}.slash{{color:#bbb;font-size:22px}}
 .row{{display:flex;align-items:center;margin:6px 0}}.cat{{width:200px;color:#555}}
 .bar{{flex:1;background:#eee;border-radius:4px;height:14px;overflow:hidden;margin:0 10px}}
@@ -944,21 +998,24 @@ h1{{font-size:24px;margin:0 0 10px;font-weight:700}}.sub{{color:#888;margin-bott
 .num{{width:120px;text-align:right;color:#333}}
 .flag{{color:#b8860b;font-weight:600;font-size:12px}}
 .spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:1px;word-break:break-all}}
-.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
-.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
+.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;
+border-radius:0 6px 6px 0;margin:14px 0}}
+.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:12px 16px;
+border-radius:0 6px 6px 0;margin:14px 0}}
 .hint{{color:#666;font-size:13px;font-weight:400}}
 .tip{{border-bottom:1px dotted #bbb;cursor:help}}
 .howto{{margin:4px 0 20px;font-size:13px;background:#fafafa;border-radius:8px;padding:8px 14px}}
 .howto summary{{cursor:pointer;color:#4477dd;font-weight:600}}
 .howto dt{{font-weight:600;margin-top:8px}}.howto dd{{margin:2px 0 0;color:#555}}
-.caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
+.caveat{{background:#fbf4ee;border-left:4px solid #b86a2c;padding:12px 16px;
+border-radius:0 6px 6px 0;margin:24px 0;color:#444}}
 h2{{font-size:15px;margin-top:28px}}sub{{color:#aaa}}
 h3{{font-size:13px;margin:18px 0 6px;color:#444}}
 .focus{{margin:6px 0;padding-left:18px}}.focus li{{margin:4px 0;color:#444}}
 </style></head><body>
 <div class="kicker">ShipSignal · AI impact audit</div>
 <h1>{_esc(result['repo'])}</h1>
-<div class="chips"><span class="chip">{_esc(_human_range(w['first_commit'], w['last_commit']))}</span><span class="chip">{w['weeks']:g} weeks</span><span class="chip">{ad['total_commits']} dev commits</span>{excl_chip}</div>
+<div class="chips">{chips_html}</div>
 <div class="gen">Generated {_esc(_human_ts(result['scanned_at']))} · shipsignal v{__version__}</div>
 
 <div class="cards">{cards}</div>
@@ -968,10 +1025,11 @@ h3{{font-size:13px;margin:18px 0 6px;color:#444}}
 <div class="headline">
   <b>AI adoption {pct:.1f}%</b>
   <span class="hint">({ad['ai_commits']}/{ad['total_commits']} commits — lower bound)</span><br>
-  {("Adoption date: <code>" + _esc(ad['adoption_date']) + "</code>") if ad.get('adoption_date') else "<span class='hint'>No sustained adoption window detected.</span>"}
+  {adoption_line}
   {breadth_html}
-  {("<br>Rate / week: <span class='spark'>" + spark + "</span> <span class='hint'>" + spark_caption + "</span>") if spark else ""}
+  {rate_line}
   <div class="hint" style="margin-top:6px">{_esc(glossary.short('ai_adoption'))}</div>
+  {squash_line}
 </div>
 
 {health_block}
@@ -1125,8 +1183,10 @@ def render_badge(result: dict) -> str:
     color = GRADE_COLOR.get(result["grade"], "#9f9f9f")
     lw, rw = int(len(label) * 6.5) + 12, int(len(value) * 6.5) + 12
     w = lw + rw
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{label}: {value}">
-<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20"
+role="img" aria-label="{label}: {value}">
+<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+<stop offset="1" stop-opacity=".1"/></linearGradient>
 <rect rx="3" width="{w}" height="20" fill="#555"/>
 <rect rx="3" x="{lw}" width="{rw}" height="20" fill="{color}"/>
 <rect rx="3" width="{w}" height="20" fill="url(#s)"/>
@@ -1297,7 +1357,7 @@ def render_trend_markdown(trend: dict) -> str:
         resolved = fixes.get("resolved", [])
         added = fixes.get("new", [])
         still = fixes.get("still_open_count", 0)
-        L += [f"## Fixes since last snapshot",
+        L += ["## Fixes since last snapshot",
               f"- ✅ **{len(resolved)} resolved**",
               f"- ➕ **{len(added)} new**",
               f"- ⏳ {still} still open", ""]
@@ -1355,7 +1415,7 @@ def _svg_trend(headlines: dict, dates: list[str]) -> str:
                 pct = v * (100 / scale) if scale != 100 else v
                 pts.append((xc(i), yc(pct)))
         out = ""
-        for a, b in zip(pts, pts[1:]):
+        for a, b in zip(pts, pts[1:], strict=False):
             if a and b:
                 out += (f"<line x1='{a[0]:.1f}' y1='{a[1]:.1f}' "
                         f"x2='{b[0]:.1f}' y2='{b[1]:.1f}' "
@@ -1502,22 +1562,28 @@ def _trend_html_wrap(repo: str, body: str) -> str:
     so a `trend.html` next to a `report.html` looks at home."""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>ShipSignal trend — {_esc(repo)}</title><style>
-body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;margin:40px auto;padding:0 20px;color:#1a1a1a}}
+body{{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:780px;
+margin:40px auto;padding:0 20px;color:#1a1a1a}}
 h1{{font-size:18px;margin-bottom:2px}}h2{{font-size:15px;margin-top:28px}}
 .sub{{color:#888;margin-bottom:18px}}
 .cards{{display:flex;gap:12px;margin:16px 0 24px;flex-wrap:wrap}}
-.tcard{{flex:1;min-width:160px;background:#fafafa;border-radius:8px;padding:14px 16px;border-top:3px solid #4477dd}}
+.tcard{{flex:1;min-width:160px;background:#fafafa;border-radius:8px;padding:14px 16px;
+border-top:3px solid #4477dd}}
 .clabel{{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
 .cval{{font-size:22px;font-weight:700;margin:4px 0}}
 .csub{{color:#777;font-size:12px}}
-.dchip{{display:inline-block;color:#fff;border-radius:5px;padding:1px 8px;font-size:12px;margin-left:6px;vertical-align:middle}}
+.dchip{{display:inline-block;color:#fff;border-radius:5px;padding:1px 8px;
+font-size:12px;margin-left:6px;vertical-align:middle}}
 .spark{{font-family:Consolas,Menlo,monospace;color:#4477dd;letter-spacing:2px;margin-top:6px}}
-.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;border-radius:0 6px 6px 0;margin:14px 0}}
-.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:10px 14px;border-radius:0 6px 6px 0;margin:10px 0;color:#444}}
+.headline{{background:#f4f8ff;border-left:4px solid #4477dd;padding:12px 16px;
+border-radius:0 6px 6px 0;margin:14px 0}}
+.withheld{{background:#fff8e1;border-left:4px solid #f0b400;padding:10px 14px;
+border-radius:0 6px 6px 0;margin:10px 0;color:#444}}
 .hint{{color:#666;font-size:13px;font-weight:400}}
 .fixrow{{display:flex;gap:18px;flex-wrap:wrap}}
 .fixrow > div{{flex:1;min-width:200px}}
-ul{{padding-left:18px}}li{{margin:6px 0}}code{{background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px}}
+ul{{padding-left:18px}}li{{margin:6px 0}}
+code{{background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px}}
 sub{{color:#aaa}}
 </style></head><body>
 {body}

@@ -16,6 +16,7 @@ Design goals:
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 
 from . import __version__, gitinfo
@@ -165,8 +166,8 @@ def default_snapshot_path(root: Path, commit_sha: str | None,
     else:
         # Only used on non-git directories; tests inject a date to keep paths
         # deterministic. Live runs on a git repo always have commit_date.
-        from datetime import datetime, timezone
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from datetime import datetime
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
     sha = (commit_sha or "nogit")[:8]
     return root / DEFAULT_SNAPSHOT_DIR / f"{date}-{sha}.json"
 

@@ -85,7 +85,9 @@ def score_scan(metrics: dict) -> tuple[int, str, list[Category]]:
     if "setup_score_frac" not in metrics:
         cats.append(Category("setup_tooling", None, 20, "indeterminate"))
     else:
-        cats.append(Category("setup_tooling", round(20 * metrics["setup_score_frac"], 1), 20, "scored"))
+        cats.append(
+            Category("setup_tooling", round(20 * metrics["setup_score_frac"], 1), 20, "scored")
+        )
 
     # Doc integrity /13 — proportional to the share of links that resolve.
     checked = metrics.get("links_checked", 0)

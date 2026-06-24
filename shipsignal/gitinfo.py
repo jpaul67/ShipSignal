@@ -9,7 +9,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 # Read-only safety flags injected into every `git` call:
 #   gc.auto=0          — git's background auto-gc otherwise triggers during a
 #                        long `log` and can abort with code 128 mid-output on

@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from . import gitinfo
@@ -497,6 +497,41 @@ def adoption_level(share: float) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Squash-merge detection — caveat the adoption FLOOR without inventing a number.
+# Squash merges collapse a PR's commits into one and frequently drop the
+# per-commit Co-Authored-By trailers we measure adoption from, so a heavy-AI team
+# on a squash workflow can read as None/Emerging. We can't recover the true rate
+# offline, but GitHub's squash default appends " (#123)" to the subject — a cheap,
+# specific fingerprint (merges are already filtered out of `commits`). When it's
+# present AND measured adoption is low, we flag the number as a floor. We never
+# change the displayed number — the caveat is purely additive.
+# ---------------------------------------------------------------------------
+_SQUASH_SUBJECT_RE = re.compile(r"\(#\d+\)\s*$")
+_SQUASH_SUBJECT_FLOOR = 0.30  # share of dev-commit subjects that look squash-merged
+
+
+def _squash_workflow_suspected(commits: list[Commit], level: str,
+                               override: bool = False) -> dict:
+    """Return {suspected, subject_frac, source} for a possible squash workflow.
+
+    ``override`` (the ``--squash`` flag) forces the flag on for workflows whose
+    squash subjects don't carry ``(#NNN)`` (GitLab, custom templates). Auto-detection
+    only fires when measured adoption is low enough to mislead (None / Emerging) — a
+    Pervasive repo is already telling the true story and needs no caveat.
+    """
+    n = len(commits)
+    frac = (sum(1 for c in commits if _SQUASH_SUBJECT_RE.search(c.subject)) / n) if n else 0.0
+    if override:
+        return {"suspected": True, "subject_frac": round(frac, 3), "source": "declared"}
+    suspected = frac >= _SQUASH_SUBJECT_FLOOR and level in ("None", "Emerging")
+    return {
+        "suspected": suspected,
+        "subject_frac": round(frac, 3),
+        "source": "detected" if suspected else None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Delivery HEALTH — a current-state snapshot scored against GENERAL engineering
 # norms. NOT a before/after, NOT AI-attributed. Always available (above a small
 # sample floor), so a scan is never empty.
@@ -521,7 +556,7 @@ def _band(value: float, points: list[tuple[float, float]], lower_is_better: bool
             return points[0][1]
         if value >= points[-1][0]:
             return points[-1][1]
-    for (t0, s0), (t1, s1) in zip(points, points[1:]):
+    for (t0, s0), (t1, s1) in zip(points, points[1:], strict=False):
         if t0 <= value <= t1:
             frac = (value - t0) / (t1 - t0) if t1 != t0 else 0
             return s0 + frac * (s1 - s0)
@@ -727,12 +762,13 @@ def compute_impact(
     repo_label: str | None = None,
     adoption_date_override: str | None = None,
     readiness_score: int | None = None,
+    squash_override: bool = False,
 ) -> dict:
     result: dict = {
         "schema_version": SCHEMA_VERSION,
         "repo": repo_label or root.name,
         "commit_sha": None,
-        "scanned_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "scanned_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "attribution_caveat": ATTRIBUTION_CAVEAT,
     }
 
@@ -799,9 +835,11 @@ def compute_impact(
     )
     ai_count = sum(1 for c in commits if c.ai_authored)
     share = round(ai_count / len(commits), 3)
+    level = adoption_level(share)
+    squash = _squash_workflow_suspected(commits, level, override=squash_override)
     result["adoption"] = {
         "ai_coauthor_share": share,
-        "level": adoption_level(share),
+        "level": level,
         "ai_commits": ai_count,
         "total_commits": len(commits),
         "adoption_date": adoption_dt.isoformat() if adoption_dt else None,
@@ -812,6 +850,9 @@ def compute_impact(
         # docstring; structurally cannot emit per-person data).
         "breadth": compute_breadth(commits),
         "note": "Lower bound — squash-merges drop trailers; gh PR data could recover them.",
+        "squash_suspected": squash["suspected"],
+        "squash_subject_frac": squash["subject_frac"],
+        "squash_source": squash["source"],
     }
 
     # --- Delivery metrics (general health, NOT causal) ---

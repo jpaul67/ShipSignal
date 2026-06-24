@@ -513,5 +513,85 @@ class TestBreadthInResult(unittest.TestCase):
         self.assertEqual(extras, set())
 
 
+# --- Squash-merge detect-and-disclose ---------------------------------------
+
+
+class TestSquashDetection(unittest.TestCase):
+    """Detect a squash workflow that undercounts trailer-based adoption."""
+
+    def _commits(self, n, squash_frac, ai=False):
+        out = []
+        n_squash = int(n * squash_frac)
+        for i in range(n):
+            subj = f"feat: thing (#{i})" if i < n_squash else f"feat: thing {i}"
+            trailers = ["Co-Authored-By: Claude <c@anthropic.com>"] if ai else []
+            out.append(_c(subject=subj, trailers=trailers))
+        return out
+
+    def test_squashy_low_adoption_is_suspected(self):
+        out = impact._squash_workflow_suspected(self._commits(20, 0.8), level="None")
+        self.assertTrue(out["suspected"])
+        self.assertEqual(out["source"], "detected")
+        self.assertGreaterEqual(out["subject_frac"], 0.30)
+
+    def test_control_repo_not_suspected(self):
+        out = impact._squash_workflow_suspected(self._commits(20, 0.0), level="None")
+        self.assertFalse(out["suspected"])
+        self.assertIsNone(out["source"])
+
+    def test_below_floor_not_suspected(self):
+        # 20% squash-style subjects is below the 0.30 floor.
+        out = impact._squash_workflow_suspected(self._commits(20, 0.2), level="Emerging")
+        self.assertFalse(out["suspected"])
+
+    def test_pervasive_not_caveated(self):
+        # A squashy repo that already reads Pervasive needs no caveat — the
+        # measured number is already telling the true story.
+        out = impact._squash_workflow_suspected(self._commits(20, 0.8), level="Pervasive")
+        self.assertFalse(out["suspected"])
+
+    def test_override_forces_flag_even_without_fingerprint(self):
+        out = impact._squash_workflow_suspected(self._commits(20, 0.0),
+                                                level="Established", override=True)
+        self.assertTrue(out["suspected"])
+        self.assertEqual(out["source"], "declared")
+
+
+class TestSquashCaveatRender(unittest.TestCase):
+    """The caveat is additive — it never changes the displayed number — and it
+    surfaces in every render format. Uses the --squash override against the real
+    repo (shipsignal's own subjects aren't squash-style, so it's a negative control)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from shipsignal import report
+        cls.report = report
+        cls.normal = compute_impact(REPO, repo_label="shipsignal")
+        cls.forced = compute_impact(REPO, repo_label="shipsignal", squash_override=True)
+
+    def test_override_is_additive_only(self):
+        self.assertFalse(self.normal["adoption"]["squash_suspected"])  # negative control
+        self.assertTrue(self.forced["adoption"]["squash_suspected"])
+        # The measured signal is byte-for-byte identical with and without the flag.
+        self.assertEqual(self.normal["adoption"]["ai_coauthor_share"],
+                         self.forced["adoption"]["ai_coauthor_share"])
+        self.assertEqual(self.normal["adoption"]["level"],
+                         self.forced["adoption"]["level"])
+
+    def test_caveat_in_cli(self):
+        self.assertIn("squash", self.report.render_impact(self.forced).lower())
+        self.assertNotIn("floor (squash)", self.report.render_impact(self.normal))
+
+    def test_caveat_in_markdown(self):
+        self.assertIn("squash-merge workflow",
+                      self.report.render_impact_markdown(self.forced).lower())
+
+    def test_caveat_in_html_wellformed(self):
+        import html.parser
+        h = self.report.render_impact_html(self.forced)
+        html.parser.HTMLParser().feed(h)  # raises on malformed markup
+        self.assertIn("squash", h.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

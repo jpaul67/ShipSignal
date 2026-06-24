@@ -11,8 +11,8 @@ import re
 from datetime import date
 from pathlib import Path
 
-from .modules import CODE_EXTS, DOC_EXTS, TEST_DATA_DIRS, WAIVED_DIRS, basename, dir_of, ext_of
 from . import gitinfo
+from .modules import CODE_EXTS, DOC_EXTS, TEST_DATA_DIRS, WAIVED_DIRS, basename, dir_of, ext_of
 
 LINK_RE = re.compile(r"\]\(([^)]+)\)")
 _ABS = re.compile(r"^[a-zA-Z]:[\\/]")  # C:\ or C:/

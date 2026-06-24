@@ -11,6 +11,11 @@ build/
 readiness.json
 bw_*/
 
+# Stray scan outputs at the repo root (the committed samples live in examples/)
+/*-audit.html
+/*-audit.md
+/*-audit.json
+
 # ShipSignal snapshots — local by default; remove this line to commit your
 # audit history (snapshots are small JSON files, human-diffable, designed
 # to be tracked if your team wants the trend story in PR reviews).

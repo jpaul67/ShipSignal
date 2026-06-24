@@ -126,6 +126,7 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             repo_label=label,
             adoption_date_override=args.adoption_date,
             readiness_score=readiness_score,
+            squash_override=args.squash,
         )
         print(report.render_impact(result))
         if args.timeline:
@@ -183,6 +184,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
             repo_label=label,
             adoption_date_override=args.adoption_date,
             readiness_score=readiness_result.get("score"),
+            squash_override=args.squash,
         )
         print(report.render_unified(impact_result, readiness_result))
         if args.timeline:
@@ -250,6 +252,9 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     impact_p.add_argument("--no-readiness", action="store_true",
                           help="skip the readiness scan (the Readiness number shows n/a)")
+    impact_p.add_argument("--squash", action="store_true",
+                          help="treat the history as squash-merged — flag AI adoption as a "
+                               "floor (for workflows whose squash commits lack a (#NNN) subject)")
     impact_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
     impact_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
@@ -266,6 +271,9 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     report_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
+    report_p.add_argument("--squash", action="store_true",
+                          help="treat the history as squash-merged — flag AI adoption as a "
+                               "floor (for workflows whose squash commits lack a (#NNN) subject)")
     report_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "

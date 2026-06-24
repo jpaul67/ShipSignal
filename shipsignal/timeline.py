@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from .impact import (
-    Commit,
     MIN_CONTRIBUTORS_FOR_BREADTH,
+    Commit,
     change_shape_metrics,
     delivery_health,
     flow_metrics,

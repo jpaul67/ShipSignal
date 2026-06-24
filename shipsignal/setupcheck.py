@@ -123,7 +123,9 @@ def _has_deps(root: Path, rootfiles: set[str]) -> bool:
                 return True
         except Exception:
             pass
-    return bool({"requirements.txt", "cargo.toml", "go.mod", "gemfile", "composer.json"} & rootfiles)
+    return bool(
+        {"requirements.txt", "cargo.toml", "go.mod", "gemfile", "composer.json"} & rootfiles
+    )
 
 
 def _mcp_resolves(root: Path, files: list[str]) -> tuple[bool, str]:
@@ -164,7 +166,6 @@ def _mcp_resolves(root: Path, files: list[str]) -> tuple[bool, str]:
 
 def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total: int = 0):
     low = [f.lower() for f in files]
-    lowset = set(low)
     rootfiles = {f for f in low if "/" not in f}
     bn = {basename(f) for f in low}
     exts = {ext_of(f) for f in files}
@@ -281,7 +282,9 @@ def detect_setup(root: Path, files: list[str], mcp_present: bool, modules_total:
                     or _pyproject_tool(root, rootfiles, "pyright")))
     has_editorconfig = ".editorconfig" in rootfiles
     has_contributing = any(n.startswith("contributing") for n in bn)
-    has_license = any(n.startswith(("license", "licence")) or n in {"copying", "unlicense"} for n in bn)
+    has_license = any(
+        n.startswith(("license", "licence")) or n in {"copying", "unlicense"} for n in bn
+    )
     deps = _has_deps(root, rootfiles)
 
     # (id, ok, weight, applicable, label, fix)
