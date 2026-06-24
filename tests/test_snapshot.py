@@ -20,8 +20,8 @@ REPO = Path(__file__).resolve().parent.parent
 
 def _git_init(d: Path):
     import os
-    env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
-           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t", "PATH": os.getenv("PATH", "")}
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env=env)
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env=env)
     return env

@@ -379,7 +379,7 @@ class TestRefPathsHeuristic(unittest.TestCase):
 
 def _git_init_repo(d: Path):
     """Initialize a tiny git repo with deterministic identity. Returns the dir."""
-    env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})

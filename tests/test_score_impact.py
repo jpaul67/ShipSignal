@@ -81,8 +81,8 @@ class TestPointsAtStake(unittest.TestCase):
 
 
 def _git_init(d: Path):
-    env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
-           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t", "PATH": os.environ.get("PATH", "")}
+    env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env=env)
     subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env=env)
     return env
@@ -173,9 +173,8 @@ class TestSpecializeFix(unittest.TestCase):
     def test_agent_fix_names_detected_command(self):
         d = Path(tempfile.mkdtemp())
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True,
-                       env={"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
-                            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t",
-                            "PATH": os.environ.get("PATH", "")})
+                       env={**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+                            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"})
         # README is substantial; package.json has a test script; no agent file.
         # Lots of code files so the small-repo n/a path doesn't fire.
         (d / "README.md").write_text("# r\n" * 30, encoding="utf-8")
@@ -184,10 +183,10 @@ class TestSpecializeFix(unittest.TestCase):
             encoding="utf-8")
         for i in range(30):
             (d / f"a{i}.js").write_text(f"// {i}\n", encoding="utf-8")
-        env = {"GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
+        env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t",
                "GIT_AUTHOR_DATE": "2026-05-01 12:00:00",
-               "GIT_COMMITTER_DATE": "2026-05-01 12:00:00", "PATH": os.environ.get("PATH", "")}
+               "GIT_COMMITTER_DATE": "2026-05-01 12:00:00"}
         subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=env)
         subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=d, check=True, env=env)
         result = scanner.scan(d, repo_label="t")
