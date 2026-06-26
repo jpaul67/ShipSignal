@@ -60,7 +60,7 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 ## Output
 
-A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates.
+A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates — or drop in the [GitHub Action](#use-it-in-ci-github-action).
 
 Readiness fixes are **ranked by payoff** — each carries an `≈+N pts` estimate (computed by re-scoring as if it were resolved, so the number always matches the model), an effort tag (`quick` / `moderate`), and a `file:line` location where one applies. Desync flags that don't move the score are labelled `informational` rather than padded with a number.
 
@@ -73,11 +73,31 @@ shipsignal trend . --limit 8 --since 2026-01-01
 
 The trend view reads only existing snapshots — no re-scan, fully offline. Honest about single-snapshot ("scan again to start a trend"), schema-version mismatches (skips the fixes diff rather than inventing false resolutions), and large window jumps (warns when one snapshot covers >30% more commits than its predecessor).
 
+## Use it in CI (GitHub Action)
+
+Gate the readiness score on every push and PR, and get the report in the run summary:
+
+```yaml
+# .github/workflows/shipsignal.yml
+name: readiness
+on: [push, pull_request]
+jobs:
+  shipsignal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "80"   # omit to report without failing the build
+```
+
+Full inputs/outputs and more examples: [docs/github-action.md](docs/github-action.md).
+
 ## Project layout
 
 - [shipsignal/](shipsignal/README.md) — the package (module map inside)
 - `tests/` — stdlib `unittest` suite
-- [examples/](examples/) — a committed sample audit
+- [examples/](examples/) — a committed sample audit + a copy-paste CI workflow
 - Working with an agent? See [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md).
 
 ## License

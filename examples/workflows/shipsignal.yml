@@ -1,0 +1,16 @@
+# Copy this into your repo at .github/workflows/shipsignal.yml
+# Gates your repo's agent-readiness score and posts the report to each run's summary.
+name: readiness
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shipsignal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "80"   # remove to report without ever failing the job

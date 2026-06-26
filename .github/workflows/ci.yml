@@ -33,3 +33,20 @@ jobs:
         run: |
           pip install ruff
           ruff check shipsignal
+
+  action:
+    # Dogfood the composite Action end-to-end (installs the published shipsignal,
+    # writes the job summary, sets outputs, enforces the gate at the self-scan floor).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        uses: ./
+        with:
+          fail-under: "90"
+      - name: Assert outputs are set
+        shell: bash
+        run: |
+          echo "score=${{ steps.gate.outputs.score }} passed=${{ steps.gate.outputs.passed }}"
+          test -n "${{ steps.gate.outputs.score }}"
+          test "${{ steps.gate.outputs.passed }}" = "true"

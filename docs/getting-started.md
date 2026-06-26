@@ -110,6 +110,24 @@ shipsignal scan . --fail-under 80
 
 Exits non-zero if the readiness score drops below the threshold.
 
+On GitHub Actions, use the first-party Action instead — same gate, plus the report in the run summary:
+
+```yaml
+# .github/workflows/shipsignal.yml
+name: readiness
+on: [push, pull_request]
+jobs:
+  shipsignal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "80"
+```
+
+See [github-action.md](github-action.md) for all inputs/outputs and more examples.
+
 ## Tracking progress over time
 
 Add `--snapshot` to any command to persist a small JSON record:

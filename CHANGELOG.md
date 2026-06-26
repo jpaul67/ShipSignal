@@ -9,6 +9,12 @@ are git-tagged).
 
 ## [Unreleased]
 
+### Added
+- **GitHub Action** (composite) wrapping `shipsignal scan` — gates the readiness score
+  (`fail-under`) and posts the Markdown report to the run's job summary. Pin via the floating
+  `@v1` tag. See [docs/github-action.md](docs/github-action.md). The PyPI release trigger was
+  tightened to strict `vX.Y.Z` tags so the `v1` Action tag never fires a publish.
+
 ## [0.6.6] — 2026-06-26
 
 ### Added

@@ -2,7 +2,8 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    # Strict vX.Y.Z only — the floating `v1` Action tag must NOT trigger a PyPI publish.
+    tags: ["v*.*.*"]
 
 permissions:
   contents: read

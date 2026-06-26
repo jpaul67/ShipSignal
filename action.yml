@@ -1,0 +1,107 @@
+name: "ShipSignal readiness gate"
+description: "Score a repo's agent-readiness in CI, post the report to the run summary, and optionally fail below a threshold."
+author: "jpaul67"
+
+branding:
+  icon: "anchor"
+  color: "yellow"
+
+inputs:
+  path:
+    description: "Path to the repo (or subdirectory) to scan."
+    required: false
+    default: "."
+  fail-under:
+    description: "Fail the job if the readiness score is below this number (0-100). Leave empty to report without ever failing."
+    required: false
+    default: ""
+  version:
+    description: "Version of shipsignal to install from PyPI (e.g. 0.6.6). Empty installs the latest."
+    required: false
+    default: ""
+  python-version:
+    description: "Python version used to run shipsignal."
+    required: false
+    default: "3.12"
+  summary:
+    description: "Write the Markdown readiness report to the job summary ('true' or 'false')."
+    required: false
+    default: "true"
+  args:
+    description: "Extra arguments passed through to `shipsignal scan` (e.g. --badge badge.svg)."
+    required: false
+    default: ""
+
+outputs:
+  score:
+    description: "The readiness score (0-100)."
+    value: ${{ steps.scan.outputs.score }}
+  passed:
+    description: "'true' if the score met the threshold (or no threshold was set), otherwise 'false'."
+    value: ${{ steps.scan.outputs.passed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install shipsignal
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: python -m pip install --quiet "shipsignal${VERSION:+==$VERSION}"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_UNDER: ${{ inputs.fail-under }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        work="$(mktemp -d)"
+        json="$work/readiness.json"
+        md="$work/readiness.md"
+
+        # Word-split the optional passthrough args (guarded for bash 3.2 / set -u).
+        extra=()
+        if [ -n "$INPUT_ARGS" ]; then
+          # shellcheck disable=SC2206
+          extra=($INPUT_ARGS)
+        fi
+
+        # Run without --fail-under so the CLI never exits early; we gate below
+        # ourselves so the summary + outputs are produced even on a failing score.
+        python -m shipsignal.cli scan "$INPUT_PATH" \
+          --json "$json" --md "$md" ${extra[@]+"${extra[@]}"}
+
+        # Parse the score and decide pass/fail in Python (handles int or float).
+        result="$(python - "$json" "$INPUT_FAIL_UNDER" <<'PY'
+        import json, sys
+        data = json.load(open(sys.argv[1]))
+        score = data["score"]
+        threshold = sys.argv[2]
+        ok = threshold == "" or score >= float(threshold)
+        print(score, "true" if ok else "false")
+        PY
+        )"
+        score="${result% *}"
+        passed="${result##* }"
+
+        echo "score=$score" >> "$GITHUB_OUTPUT"
+        echo "passed=$passed" >> "$GITHUB_OUTPUT"
+
+        if [ "$INPUT_SUMMARY" = "true" ]; then
+          cat "$md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$passed" = "false" ]; then
+          echo "::error::ShipSignal readiness $score is below the required $INPUT_FAIL_UNDER"
+          exit 1
+        fi
+        echo "ShipSignal readiness: $score (threshold: ${INPUT_FAIL_UNDER:-none})"
