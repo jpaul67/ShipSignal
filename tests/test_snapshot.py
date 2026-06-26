@@ -23,7 +23,11 @@ def _git_init(d: Path):
     env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env=env)
-    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env=env)
+    # Mirror the scanner's git hardening so background auto-gc can't abort a
+    # commit mid-loop (gitinfo._GIT_SAFE_FLAGS).
+    for key, val in (("commit.gpgsign", "false"), ("gc.auto", "0"),
+                     ("maintenance.auto", "false")):
+        subprocess.run(["git", "config", key, val], cwd=d, check=True, env=env)
     return env
 
 

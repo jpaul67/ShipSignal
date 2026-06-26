@@ -14,6 +14,13 @@ are git-tagged).
   (`fail-under`) and posts the Markdown report to the run's job summary. Pin via the floating
   `@v1` tag. See [docs/github-action.md](docs/github-action.md). The PyPI release trigger was
   tightened to strict `vX.Y.Z` tags so the `v1` Action tag never fires a publish.
+- Community health: `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), GitHub issue forms
+  (bug / feature) and a pull-request template.
+
+### Fixed
+- CI flake: hardened the test git helpers with `gc.auto=0` / `maintenance.auto=false` (mirroring
+  the scanner's own git flags) so background auto-gc can't abort a commit during many-commit test
+  loops.
 
 ## [0.6.6] — 2026-06-26
 

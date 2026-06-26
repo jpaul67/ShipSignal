@@ -1,0 +1,79 @@
+name: Bug / scan result looks wrong
+description: A crash, an error, or a ShipSignal number or finding that looks incorrect for a real repo.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Wrong-looking scan results on real repos are the single most useful
+        report right now. **ShipSignal never needs your source code** — the command you ran, the
+        output, and a few repo characteristics are plenty. For anything security-sensitive, use the
+        **Security** tab instead of a public issue.
+  - type: dropdown
+    id: command
+    attributes:
+      label: Which command?
+      options:
+        - report
+        - impact
+        - scan
+        - trend
+        - other / not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ShipSignal version
+      description: Output of `shipsignal --version`.
+      placeholder: e.g. 0.6.6
+    validations:
+      required: true
+  - type: textarea
+    id: command-line
+    attributes:
+      label: Exact command you ran
+      render: shell
+      placeholder: shipsignal report . --html audit.html
+    validations:
+      required: true
+  - type: textarea
+    id: reported
+    attributes:
+      label: What ShipSignal reported
+      description: The relevant number, finding, or error text. Paste CLI output if handy.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected — and why
+      description: What's the correct answer for this repo, and what makes you confident it's wrong?
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS + Python version
+      placeholder: e.g. macOS 14 / Python 3.12
+    validations:
+      required: false
+  - type: textarea
+    id: repo
+    attributes:
+      label: Repo characteristics
+      description: >
+        Anything that helps reproduce: primary language, rough size (commits / files), monorepo or
+        not, squash-merge workflow, and a public URL if the repo is shareable.
+    validations:
+      required: false
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Before submitting
+      options:
+        - label: I'm on the latest ShipSignal version (or noted above why not).
+          required: true
+        - label: This isn't a security vulnerability (those go privately via the Security tab).
+          required: true

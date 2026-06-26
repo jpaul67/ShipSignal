@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a new detector, output format, or capability.
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! For anything non-trivial, please open this issue **before** a PR so we
+        can align on the approach first (see CONTRIBUTING.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to learn or prevent that ShipSignal can't do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Fit with ShipSignal's constraints
+      description: The core is deliberately constrained — see the README's "What ShipSignal will not do".
+      options:
+        - label: This keeps the core stdlib-only (no new runtime dependencies).
+          required: false
+        - label: This stays local / no-network and never reports individuals or source contents.
+          required: false

@@ -381,8 +381,14 @@ def _git_init_repo(d: Path):
     """Initialize a tiny git repo with deterministic identity. Returns the dir."""
     env = {**os.environ, "GIT_AUTHOR_NAME": "T", "GIT_AUTHOR_EMAIL": "t@t",
            "GIT_COMMITTER_NAME": "T", "GIT_COMMITTER_EMAIL": "t@t"}
-    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})
-    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=d, check=True, env={**env, "PATH": os.environ.get("PATH", "")})
+    penv = {**env, "PATH": os.environ.get("PATH", "")}
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=d, check=True, env=penv)
+    # Mirror the scanner's git hardening (gitinfo._GIT_SAFE_FLAGS): without it,
+    # background auto-gc can fire during a many-commit test loop and abort a
+    # `git commit` mid-run — the source of an intermittent CI flake.
+    for key, val in (("commit.gpgsign", "false"), ("gc.auto", "0"),
+                     ("maintenance.auto", "false")):
+        subprocess.run(["git", "config", key, val], cwd=d, check=True, env=penv)
     return env
 
 
@@ -390,7 +396,10 @@ def _git_commit(d: Path, env: dict, message: str, date: str):
     """Commit all changes with a fixed author + commit date (YYYY-MM-DD)."""
     e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
-    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message], cwd=d, check=True, env=e)
+    p = subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message],
+                       cwd=d, env=e, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"git commit failed (rc={p.returncode}): {p.stderr.strip()}")
 
 
 class TestGitInfoHelpers(unittest.TestCase):
