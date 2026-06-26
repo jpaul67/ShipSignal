@@ -1,0 +1,66 @@
+# Smoke-test for jpaul67/ShipSignal@v1 — run from an EXTERNAL repo
+# after the ShipSignal repo has been made public.
+#
+# Setup:
+#   gh repo create jpaul67/shipsignal-smoke --public --add-readme --clone
+#   cd shipsignal-smoke
+#   mkdir -p .github/workflows
+#   cp <this-file> .github/workflows/smoke.yml
+#   git add . && git commit -m "smoke test ShipSignal@v1" && git push
+#
+# Verify:
+#   gh run watch            # or: gh run view --web
+#
+# Cleanup:
+#   gh repo delete jpaul67/shipsignal-smoke --yes
+
+name: smoke
+on: [push, workflow_dispatch]
+
+jobs:
+  report-only:
+    name: "resolve @v1 + report (no gate)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: s
+        uses: jpaul67/ShipSignal@v1
+      - run: |
+          test -n "${{ steps.s.outputs.score }}"
+          echo "score=${{ steps.s.outputs.score }} passed=${{ steps.s.outputs.passed }}"
+
+  gate-pass:
+    name: "gate-pass (threshold=1)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: s
+        uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "1"
+      - run: test "${{ steps.s.outputs.passed }}" = "true"
+
+  gate-fail:
+    name: "gate-fail (threshold=101, expects failure)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: s
+        continue-on-error: true
+        uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "101"
+      - run: |
+          test "${{ steps.s.outcome }}"        = "failure"
+          test "${{ steps.s.outputs.passed }}" = "false"
+          test -n "${{ steps.s.outputs.score }}"
+          echo "gate correctly failed at score=${{ steps.s.outputs.score }}"
+
+  pinned-version:
+    name: "pinned PyPI version (0.6.6)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          version: "0.6.6"
