@@ -9,6 +9,8 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-06-26
+
 ### Added
 - **Squash-merge detection for the Impact lens.** When a repo's history looks squash-merged
   *and* measured AI adoption is low, the report flags that `Co-Authored-By` trailers are likely
@@ -16,6 +18,10 @@ are git-tagged).
   for `impact` and `report` (for workflows whose squash subjects don't carry `(#123)`). The
   displayed adoption level is never altered — the caveat is purely additive.
 - `SECURITY.md` (security policy + threat model) and this `CHANGELOG.md`.
+- CI matrix: 3 OS × Python 3.11–3.13 with ruff lint gate (package cleaned from 47 lint errors to 0).
+
+### Fixed
+- HTML report renders the full styled page when git history is unavailable (was falling back to a bare text block).
 
 ## [0.6.5] — 2026-06-23
 
