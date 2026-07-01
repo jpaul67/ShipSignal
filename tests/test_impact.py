@@ -57,6 +57,28 @@ class TestTrailerDetection(unittest.TestCase):
         ])
         self.assertEqual(c.ai_tools, {"Claude", "Cursor"})
 
+    def test_short_alias_does_not_match_inside_unrelated_word(self):
+        # Regression: "amp" must match only the whole word "amp", never a
+        # fragment of "example.com" (or any other unrelated token).
+        c = _c(trailers=["Co-Authored-By: Jane Doe <jane@example.com>"])
+        self.assertFalse(c.ai_authored)
+        self.assertEqual(c.ai_tools, set())
+
+    def test_new_registry_aliases_recognized(self):
+        for trailer, label in [
+            ("Co-Authored-By: Codex <noreply@openai.com>", "Codex"),
+            ("Co-Authored-By: Amp <amp@ampcode.com>", "Amp"),
+            ("Co-Authored-By: Roo Code <roomote@roocode.com>", "Roo Code"),
+        ]:
+            c = _c(trailers=[trailer])
+            self.assertTrue(c.ai_authored, trailer)
+            self.assertIn(label, c.ai_tools, trailer)
+
+    def test_gpt_dash_alias_still_matches_versioned_mentions(self):
+        c = _c(trailers=["Co-Authored-By: GPT-4 <noreply@openai.com>"])
+        self.assertTrue(c.ai_authored)
+        self.assertIn("GPT/ChatGPT", c.ai_tools)
+
 
 class TestBotDetection(unittest.TestCase):
     def test_maintenance_bots(self):
@@ -76,6 +98,7 @@ class TestBotDetection(unittest.TestCase):
             ("159125892+gpt-engineer-app[bot]@users.noreply.github.com", "GPT-Engineer"),
             ("devin-ai-integration[bot]@users.noreply.github.com", "Devin"),
             ("copilot-swe-agent[bot]@users.noreply.github.com", "Copilot"),
+            ("google-labs-jules[bot]@users.noreply.github.com", "Jules"),
         ]:
             c = _c(email=email)
             self.assertTrue(c.is_ai_agent, email)

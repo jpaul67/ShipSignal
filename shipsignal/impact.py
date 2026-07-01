@@ -29,8 +29,13 @@ SCHEMA_VERSION = "impact-0.2"
 
 # ---------------------------------------------------------------------------
 # Known-AI registry — versioned constant (extend deliberately).
-# A trailer is "AI" iff it is a `Co-Authored-By:` line whose value matches one
-# of these tokens (case-insensitive substring match).
+# A trailer is "AI" iff it is a `Co-Authored-By:` line containing one of these
+# keys as a WHOLE TOKEN — never a bare substring. Matching is exact-token
+# (see _tokens/_alias_key below), not `kw in line`: a short key like "amp"
+# must match the standalone word "amp", not a fragment of "example.com".
+# Each entry's trailer/account form should be verified against the tool's own
+# docs or real commits before adding — this registry is evidence, not a
+# guess.
 # ---------------------------------------------------------------------------
 AI_TOOL_ALIASES: dict[str, str] = {
     "claude": "Claude",
@@ -44,6 +49,11 @@ AI_TOOL_ALIASES: dict[str, str] = {
     "aider": "Aider",
     "devin": "Devin",
     "cody": "Cody",
+    # Added 2026-07 (Package E) — trailer forms verified against each
+    # project's own docs/commits (see CHANGELOG for source links):
+    "codex": "Codex",         # OpenAI Codex CLI: "Co-authored-by: Codex <noreply@openai.com>"
+    "amp": "Amp",             # Sourcegraph Amp: "Co-authored-by: Amp <amp@ampcode.com>"
+    "roocode": "Roo Code",    # Roo Code: "Co-authored-by: Roo Code <roomote@roocode.com>"
 }
 
 # ---------------------------------------------------------------------------
@@ -76,7 +86,31 @@ _AI_AGENT_BOTS = {
     "gpt-engineer": "GPT-Engineer", "devin": "Devin", "sweep": "Sweep",
     "aider": "Aider", "claude": "Claude", "copilot": "Copilot",
     "cursor": "Cursor", "codex": "Codex", "codegen": "Codegen",
+    "jules": "Jules",  # google-labs-jules[bot] — Google's cloud coding agent
 }
+
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _tokens(text: str) -> set[str]:
+    """Lowercase, alnum-only tokens split on any run of non-alphanumeric
+    characters. Used for AI-alias matching so a short registry key (e.g.
+    "amp") can only match a whole word, never a fragment of an unrelated one
+    — "example.com" tokenizes to {"example", "com"}, which does not contain
+    "amp", so a human co-author at that domain is correctly not flagged."""
+    return set(_TOKEN_RE.findall(text.lower()))
+
+
+def _alias_key(kw: str) -> str:
+    """Normalize an AI_TOOL_ALIASES key to the exact token it must match.
+    Some historical keys carry a trailing '-' (e.g. "gpt-", meant to pair
+    with "GPT-4"-style mentions); token matching makes the dash itself
+    unnecessary, so it's stripped here rather than rewriting the registry."""
+    return kw.rstrip("-")
+
+
+_AI_ALIAS_KEYS: dict[str, str] = {_alias_key(kw): label for kw, label in AI_TOOL_ALIASES.items()}
 
 
 def _bot_kind(email: str) -> tuple[str, str | None] | None:
@@ -165,7 +199,7 @@ class Commit:
             low = t.lower()
             if not low.startswith("co-authored-by:"):
                 continue
-            if any(kw in low for kw in AI_TOOL_ALIASES):
+            if _AI_ALIAS_KEYS.keys() & _tokens(low):
                 return True
         return False
 
@@ -178,9 +212,8 @@ class Commit:
             low = t.lower()
             if not low.startswith("co-authored-by:"):
                 continue
-            for kw, label in AI_TOOL_ALIASES.items():
-                if kw in low:
-                    out.add(label)
+            for matched_key in _AI_ALIAS_KEYS.keys() & _tokens(low):
+                out.add(_AI_ALIAS_KEYS[matched_key])
         return out
 
     @property

@@ -60,7 +60,15 @@ Module detection is **ecosystem-aware** (npm / pnpm / Cargo workspaces, then a d
 
 ## Output
 
-A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text, optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates — or drop in the [GitHub Action](#use-it-in-ci-github-action).
+A canonical JSON (`readiness.json` / `impact.json` / combined `report` JSON — findings or metrics, **never file or diff contents**), CLI text (colored on a real terminal; `--no-color` or `NO_COLOR` to disable), optional Markdown / HTML reports, and a `readiness: N/100` badge SVG. Exit non-zero with `--fail-under N` for CI gates — or drop in the [GitHub Action](#use-it-in-ci-github-action).
+
+The SVG badge is static — it goes stale the moment the score changes. `--badge-json FILE` (on `scan` and `report`) writes a [shields.io endpoint payload](https://shields.io/badges/endpoint-badge) instead: publish it somewhere shields can fetch it (a gist, GitHub Pages, ...) and the badge in your README updates on its own, no re-commit needed. See [examples/workflows/live-badge.yml](examples/workflows/live-badge.yml) for a full recipe (publish to a gist from CI):
+
+```bash
+shipsignal scan . --badge-json badge.json
+gh gist edit <gist-id> badge.json   # or `gh gist create` the first time
+# README: ![readiness](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/<user>/<gist-id>/raw/badge.json)
+```
 
 Readiness fixes are **ranked by payoff** — each carries an `≈+N pts` estimate (computed by re-scoring as if it were resolved, so the number always matches the model), an effort tag (`quick` / `moderate`), and a `file:line` location where one applies. Desync flags that don't move the score are labelled `informational` rather than padded with a number.
 

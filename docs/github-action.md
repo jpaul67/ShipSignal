@@ -42,7 +42,7 @@ are always produced — even on a failing score.
 | `version` | *(empty)* | Pin the ShipSignal version from PyPI (e.g. `0.6.6`). Empty installs the latest. |
 | `python-version` | `3.12` | Python version used to run ShipSignal. |
 | `summary` | `true` | Write the Markdown report to the job summary. Set `false` to skip. |
-| `args` | *(empty)* | Extra arguments passed through to `shipsignal scan` (e.g. `--badge badge.svg`). |
+| `args` | *(empty)* | Extra arguments passed through to `shipsignal scan` (e.g. `--badge badge.svg`, `--badge-json badge.json`). |
 
 ## Outputs
 
@@ -77,6 +77,20 @@ are always produced — even on a failing score.
           path: packages/core
           fail-under: "75"
       - run: echo "Readiness was ${{ steps.ship.outputs.score }}"
+```
+
+**Publish a live badge** (`--badge-json` passed through via `args`, then republished to a gist so a
+README badge updates without a new commit every time the score changes — full recipe in
+[examples/workflows/live-badge.yml](../examples/workflows/live-badge.yml)):
+
+```yaml
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          args: "--badge-json badge.json"
+      - env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GIST_ID }}
+        run: gh gist edit "$GIST_ID" badge.json
 ```
 
 ## Versioning

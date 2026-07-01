@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import gitinfo, impact, report, scanner, snapshot, trend
+from . import ansi, gitinfo, impact, report, scanner, snapshot, trend
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -82,12 +82,13 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     assert root is not None
     try:
         result = scanner.scan(root, repo_label=label)
-        print(report.render(result))
+        print(report.render(result, color=ansi.resolve_enabled(args.no_color)))
         for path, payload in (
             (args.json, lambda: json.dumps(result, indent=2)),
             (args.md, lambda: report.render_markdown(result)),
             (args.html, lambda: report.render_html(result)),
             (args.badge, lambda: report.render_badge(result)),
+            (args.badge_json, lambda: report.render_badge_json(result)),
         ):
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
@@ -128,7 +129,7 @@ def _cmd_impact(args: argparse.Namespace) -> int:
             readiness_score=readiness_score,
             squash_override=args.squash,
         )
-        print(report.render_impact(result))
+        print(report.render_impact(result, color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
             print(report.render_trajectory_cli(result))
         for path, payload in (
@@ -186,7 +187,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
             readiness_score=readiness_result.get("score"),
             squash_override=args.squash,
         )
-        print(report.render_unified(impact_result, readiness_result))
+        print(report.render_unified(impact_result, readiness_result,
+                                    color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
             print(report.render_trajectory_cli(impact_result))
 
@@ -200,6 +202,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
             (args.json, lambda: json.dumps(combined, indent=2, default=str)),
             (args.md, lambda: report.render_unified_markdown(impact_result, readiness_result)),
             (args.html, lambda: report.render_unified_html(impact_result, readiness_result)),
+            (args.badge_json, lambda: report.render_badge_json(readiness_result)),
         ):
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
@@ -236,12 +239,17 @@ def main(argv: list[str] | None = None) -> int:
     scan_p.add_argument("--md", metavar="FILE", help="write a Markdown report to FILE")
     scan_p.add_argument("--html", metavar="FILE", help="write an HTML report to FILE")
     scan_p.add_argument("--badge", metavar="FILE", help="write a readiness badge SVG to FILE")
+    scan_p.add_argument("--badge-json", metavar="FILE",
+                        help="write a shields.io endpoint-badge JSON to FILE — publish it "
+                             "(e.g. to a gist) for a live README badge that never goes stale")
     scan_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
                         metavar="PATH",
                         help="persist a small JSON snapshot for `shipsignal trend` "
                              "(default location: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
     scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
                         help="exit non-zero if the score is below N")
+    scan_p.add_argument("--no-color", action="store_true",
+                        help="disable ANSI color in terminal output (also honors NO_COLOR)")
 
     impact_p = sub.add_parser("impact", help="impact lens — is AI changing how the team ships?")
     impact_p.add_argument("target", help="local path, https git URL, or owner/repo")
@@ -261,12 +269,17 @@ def main(argv: list[str] | None = None) -> int:
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "
                                "(default: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
+    impact_p.add_argument("--no-color", action="store_true",
+                          help="disable ANSI color in terminal output (also honors NO_COLOR)")
 
     report_p = sub.add_parser("report", help="unified audit: both lenses, one deliverable")
     report_p.add_argument("target", help="local path, https git URL, or owner/repo")
     report_p.add_argument("--json", metavar="FILE", help="write the combined JSON to FILE")
     report_p.add_argument("--md", metavar="FILE", help="write a unified Markdown report to FILE")
     report_p.add_argument("--html", metavar="FILE", help="write a unified HTML report to FILE")
+    report_p.add_argument("--badge-json", metavar="FILE",
+                          help="write a shields.io endpoint-badge JSON (readiness score) to "
+                               "FILE — publish it (e.g. to a gist) for a live README badge")
     report_p.add_argument("--adoption-date", metavar="YYYY-MM-DD", default=None,
                           help="override the auto-detected adoption date")
     report_p.add_argument("--timeline", action="store_true",
@@ -278,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "
                                "(default: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
+    report_p.add_argument("--no-color", action="store_true",
+                          help="disable ANSI color in terminal output (also honors NO_COLOR)")
 
     trend_p = sub.add_parser(
         "trend",

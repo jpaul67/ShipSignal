@@ -1,0 +1,33 @@
+# Copy this into your repo at .github/workflows/live-badge.yml
+#
+# Publishes a LIVE readiness badge: unlike the static SVG from `--badge`,
+# this JSON gets re-published to a gist on every run, so a badge pasted into
+# your README updates automatically — no commit needed when the score changes.
+#
+# One-time setup:
+#   1. Create a gist to hold the badge JSON (note the returned ID):
+#        gh gist create --public -d "shipsignal readiness badge" <(echo '{}')
+#   2. Create a fine-grained PAT (or classic token) with `gist` scope and add
+#      it as a repo secret named GIST_TOKEN.
+#   3. Set GIST_ID below (or as a repo variable) to the ID from step 1.
+#   4. Paste this into your README, replacing <gist-id> and <github-user>:
+#        ![readiness](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/<github-user>/<gist-id>/raw/badge.json)
+
+name: live-badge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet shipsignal
+      - run: shipsignal scan . --badge-json badge.json
+      # `gh` ships preinstalled on GitHub-hosted runners.
+      - env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ vars.GIST_ID }}
+        run: gh gist edit "$GIST_ID" badge.json

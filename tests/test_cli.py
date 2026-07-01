@@ -1,7 +1,12 @@
 """CLI surface tests — flags that don't belong to any single subcommand."""
+import json
 import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
 
 
 class TestVersionFlag(unittest.TestCase):
@@ -16,6 +21,21 @@ class TestVersionFlag(unittest.TestCase):
             result.stdout.startswith("shipsignal "),
             f"unexpected --version stdout: {result.stdout!r}",
         )
+
+
+class TestBadgeJsonFlag(unittest.TestCase):
+    def test_scan_badge_json_is_a_valid_shields_endpoint(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "badge.json"
+            result = subprocess.run(
+                [sys.executable, "-m", "shipsignal.cli", "scan", ".", "--badge-json", str(out)],
+                capture_output=True, text=True, cwd=str(REPO),
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schemaVersion"], 1)
+            self.assertEqual(payload["label"], "readiness")
+            self.assertRegex(payload["message"], r"^\d+/100$")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 """Smoke + unit tests (stdlib unittest — no third-party dep)."""
+import json
 import os
 import subprocess
 import tempfile
@@ -12,7 +13,7 @@ from shipsignal.detectors import (
 )
 from shipsignal.scoring import score_scan, grade_for
 from shipsignal.setupcheck import _has_arch_doc, ARCH_MODULE_THRESHOLD, detect_setup
-from shipsignal import gitinfo
+from shipsignal import gitinfo, report
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -25,6 +26,31 @@ class TestSelfScan(unittest.TestCase):
         self.assertTrue(any(m["path"] == "." for m in result["modules"]))
         # the package dir should be detected as a module
         self.assertTrue(any(m["path"] == "shipsignal" for m in result["modules"]))
+
+
+class TestBadgeJSON(unittest.TestCase):
+    """render_badge_json — the shields.io endpoint payload (Package B)."""
+
+    def _payload(self, score, grade):
+        return json.loads(report.render_badge_json({"score": score, "grade": grade}))
+
+    def test_schema_shape(self):
+        payload = self._payload(83, "B")
+        self.assertEqual(payload["schemaVersion"], 1)
+        self.assertEqual(payload["label"], "readiness")
+        self.assertEqual(payload["message"], "83/100")
+        self.assertEqual(payload["color"], "97ca00")
+
+    def test_color_matches_svg_badge_per_grade_band(self):
+        # The JSON badge and the SVG badge must agree on color per grade —
+        # they're two renderings of the same GRADE_COLOR table.
+        for grade, hex_color in report.GRADE_COLOR.items():
+            payload = self._payload(0, grade)
+            self.assertEqual(payload["color"], hex_color.lstrip("#"), grade)
+
+    def test_unknown_grade_falls_back_to_gray(self):
+        payload = self._payload(50, "Z")
+        self.assertEqual(payload["color"], "9f9f9f")
 
 
 class TestPnpmParse(unittest.TestCase):

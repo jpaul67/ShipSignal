@@ -1,11 +1,12 @@
 """Rendering: CLI text, Markdown/HTML reports, and a badge SVG."""
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import datetime
 from html import escape as _esc
 
-from . import __version__, glossary
+from . import __version__, ansi, glossary
 from .detectors import AREA_ORDER
 
 GRADE_COLOR = {"A": "#4c1", "B": "#97ca00", "C": "#dfb317", "D": "#fe7d37", "F": "#e05d44"}
@@ -273,11 +274,13 @@ def _render_grouped_fixes_html(findings: list[dict]) -> str:
     return "\n".join(blocks_html) or "<p>None — nicely set up. ✓</p>"
 
 
-def render(result: dict) -> str:
+def render(result: dict, *, color: bool = False) -> str:
     out = []
     out.append("")
     out.append(f"  ShipSignal readiness — {result['repo']}")
-    out.append(f"  Score: {result['score']}/100   (grade {result['grade']})")
+    score_line = ansi.bold(f"Score: {result['score']}/100", color)
+    grade_line = ansi.grade(f"(grade {result['grade']})", result["grade"], color)
+    out.append(f"  {score_line}   {grade_line}")
     out.append("")
     for c in result["categories"]:
         cid = c["id"]
@@ -478,7 +481,18 @@ def _squash_caveat(ad: dict) -> str | None:
             f"so AI adoption is undercounted; treat it as a floor, not a measurement")
 
 
-def render_impact(result: dict) -> str:
+# AI Adoption has no letter grade, but the same green/yellow/red intent
+# applies: None is a gap, Emerging/Established are progress, Pervasive is
+# the strongest signal.
+_ADOPTION_BAND = {"None": "red", "Emerging": "yellow", "Established": "green",
+                  "Pervasive": "green"}
+
+
+def _adoption_color(text: str, level: str, enabled: bool) -> str:
+    return ansi.paint(text, _ADOPTION_BAND.get(level, ""), enabled)
+
+
+def render_impact(result: dict, *, color: bool = False) -> str:
     L: list[str] = ["", f"  ShipSignal impact — {result['repo']}"]
     if result.get("error"):
         L += [f"  AI Adoption / Delivery Health: {result['error']}", ""]
@@ -503,16 +517,30 @@ def render_impact(result: dict) -> str:
     tool = ""
     if ad.get("per_tool"):
         tool = "  (" + ", ".join(f"{k} {v}" for k, v in ad["per_tool"].items()) + ")"
-    L.append(f"  AI Adoption      {ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%{tool}"
-             f"{'  ! floor (squash)' if sq else ''}")
+    # Labels are padded to a fixed column (17) before bolding so plain output
+    # (color disabled) stays byte-identical to the pre-color layout.
+    _LW = 17
+    adoption_label = ansi.bold(f"{'AI Adoption':<{_LW}}", color)
+    adoption_val = _adoption_color(
+        f"{ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%", ad["level"], color)
+    floor_flag = ansi.warn("  ! floor (squash)", color) if sq else ""
+    L.append(f"  {adoption_label}{adoption_val}{tool}{floor_flag}")
+
+    dh_label = ansi.bold(f"{'Delivery Health':<{_LW}}", color)
     if dh["status"] == "scored":
         flags = [c["flag"] for c in dh["components"] if c.get("flag")]
-        flag_s = ("   ! " + "; ".join(flags)) if flags else ""
-        L.append(f"  Delivery Health  {dh['score']}/100 · {dh['grade']}{flag_s}")
+        flag_s = ansi.warn("   ! " + "; ".join(flags), color) if flags else ""
+        dh_val = ansi.grade(f"{dh['score']}/100 · {dh['grade']}", dh["grade"], color)
+        L.append(f"  {dh_label}{dh_val}{flag_s}")
     else:
-        L.append(f"  Delivery Health  —  ({dh['reason']})")
-    L.append(f"  Readiness        {rd['score']}/100 · {rd['grade']}" if rd
-             else "  Readiness        —  (run a readiness scan to populate)")
+        L.append(f"  {dh_label}—  ({dh['reason']})")
+
+    rd_label = ansi.bold(f"{'Readiness':<{_LW}}", color)
+    if rd:
+        rd_val = ansi.grade(f"{rd['score']}/100 · {rd['grade']}", rd["grade"], color)
+        L.append(f"  {rd_label}{rd_val}")
+    else:
+        L.append(f"  {rd_label}—  (run a readiness scan to populate)")
     L.append("")
 
     # --- AI adoption detail ---
@@ -1066,12 +1094,13 @@ def _readiness_fix_lines(readiness_result: dict, limit: int = 8) -> list[dict]:
     return warns[:limit], max(0, len(warns) - limit)
 
 
-def render_unified(impact_result: dict, readiness_result: dict) -> str:
+def render_unified(impact_result: dict, readiness_result: dict, *, color: bool = False) -> str:
     """Plain-text CLI rendering — Impact lens header + Readiness fix backlog."""
-    L = [render_impact(impact_result).rstrip()]
+    L = [render_impact(impact_result, color=color).rstrip()]
     L.append("")
-    L.append(f"  Readiness {readiness_result['score']}/100 · {readiness_result['grade']}"
-             "  (full breakdown + fixes below)")
+    rd_headline = ansi.grade(f"{readiness_result['score']}/100 · {readiness_result['grade']}",
+                             readiness_result["grade"], color)
+    L.append(f"  Readiness {rd_headline}  (full breakdown + fixes below)")
     L.append("")
     for c in readiness_result["categories"]:
         if c["status"] == "scored":
@@ -1207,6 +1236,24 @@ role="img" aria-label="{label}: {value}">
 <text x="{lw / 2:.0f}" y="14">{label}</text>
 <text x="{lw + rw / 2:.0f}" y="14">{value}</text>
 </g></svg>"""
+
+
+def render_badge_json(result: dict) -> str:
+    """A shields.io endpoint-badge payload (https://shields.io/badges/endpoint-badge).
+
+    Unlike ``render_badge``'s static SVG — which has to be committed and goes
+    stale the moment the score changes — this JSON is meant to be republished
+    somewhere shields.io can fetch it (a gist, GitHub Pages, ...), so a badge
+    pasted into a README stays live without a new commit on every scan.
+    """
+    color = GRADE_COLOR.get(result["grade"], "#9f9f9f")
+    payload = {
+        "schemaVersion": 1,
+        "label": "readiness",
+        "message": f"{result['score']}/100",
+        "color": color.lstrip("#"),
+    }
+    return json.dumps(payload, indent=2) + "\n"
 
 
 # ---------------------------------------------------------------------------
