@@ -4,12 +4,14 @@ Written 2026-07-01, just after the repo went public (v0.6.6 on PyPI, Action live
 `jpaul67/ShipSignal@v1`, external smoke test verified). Nine work packages, grouped into four
 release trains. Each package is written to be handed to a separate agent with no other context.
 
-**Status (2026-07-01): Train 1 (Packages E, H, B) implemented** — code, tests, and docs landed
-on `main` (uncommitted at time of writing). Full suite green (225 tests), zero new lint errors,
-dogfood gate passes. NOT yet done: the version bump + tag + PyPI publish (Release mechanics,
-below) — that's a real, hard-to-reverse publish action and needs the user's go-ahead. Also
-still open from Package B: publishing a live gist badge for ShipSignal's own README (needs a
-`gh` PAT with `gist` scope the user has to create).
+**Status (2026-07-01): Train 1 (Packages E, H, B) SHIPPED.** Code, tests, and docs landed on
+`main`, released as **v0.7.0** (tagged, PyPI publish verified live), and the live-badge dogfood
+loop is running in production — the `live-badge` workflow republishes the gist on every push to
+main (`gh workflow run live-badge` to trigger manually), and the README badge renders from it.
+`GIST_TOKEN` (classic PAT, `gist` scope) and `GIST_ID` are set as a repo secret/variable.
+
+**Not started: Trains 2–4** (Packages A, C, G, I, F, D — see the table below). Pick up with
+whichever package/train is next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 
