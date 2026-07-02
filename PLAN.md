@@ -10,8 +10,16 @@ loop is running in production — the `live-badge` workflow republishes the gist
 main (`gh workflow run live-badge` to trigger manually), and the README badge renders from it.
 `GIST_TOKEN` (classic PAT, `gist` scope) and `GIST_ID` are set as a repo secret/variable.
 
-**Not started: Trains 2–4** (Packages A, C, G, I, F, D — see the table below). Pick up with
-whichever package/train is next.
+**Status (2026-07-02): Package A (Action PR-comment mode) SHIPPED to `main`** (merged via
+[PR #5](https://github.com/jpaul67/ShipSignal/pull/5)). Verified live on that PR: comment
+posted, upserted in place across 3 follow-up pushes (never duplicated), and the fork-safety
+degrade path (token lacks write access → `::notice::`, job still passes) confirmed via a
+temporary permission drop + revert. Not yet released to PyPI/tagged — held to land together
+with Package C and the pending security-audit fixes as **v0.8.0**. The floating `v1` Action tag
+and the external `shipsignal-smoke` verification are deferred to that release step.
+
+**Not started: rest of Train 2 (Package C), and Trains 3–4** (Packages C, G, I, F, D — see the
+table below). Pick up with whichever package/train is next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 
