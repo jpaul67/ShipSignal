@@ -18,7 +18,9 @@ are git-tagged).
   for `pull_request` events from a fork, where GitHub always issues a read-only token regardless
   of declared permissions. Base-branch delta reporting is explicitly out of scope for this
   version. `ci.yml`'s own `action` dogfood job now runs with `pr-comment: "true"`, so every PR to
-  this repo demonstrates the feature on itself.
+  this repo demonstrates the feature on itself. (Caught live on the dogfood PR: `gh api`'s
+  `-f`/`--raw-field` always sends a literal string — only `-F`/`--field` reads `@path` as file
+  content — so the comment body is posted with `-F`.)
 
 ### Fixed
 - **Security hardening from a repo audit**: `gitinfo.clone` now puts a `--` separator before the
