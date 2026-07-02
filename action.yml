@@ -151,11 +151,11 @@ runs:
 
           if [ -n "$existing_id" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" \
-              -f body=@"$comment" >/dev/null 2>&1 \
+              -F body=@"$comment" >/dev/null 2>&1 \
               || echo "::notice::shipsignal: could not update the PR comment (read-only token, e.g. a fork PR?) — skipping"
           else
             gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              -f body=@"$comment" >/dev/null 2>&1 \
+              -F body=@"$comment" >/dev/null 2>&1 \
               || echo "::notice::shipsignal: could not post a PR comment (read-only token, e.g. a fork PR?) — skipping"
           fi
         fi
