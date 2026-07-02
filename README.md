@@ -2,6 +2,8 @@
 
 [![PyPI](https://img.shields.io/pypi/v/shipsignal.svg)](https://pypi.org/project/shipsignal/) [![Python](https://img.shields.io/pypi/pyversions/shipsignal.svg)](https://pypi.org/project/shipsignal/) [![readiness](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jpaul67/1f11588ed918a940ac48ae50b5aaaaea/raw/badge.json)](https://github.com/jpaul67/ShipSignal/actions/workflows/live-badge.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+![ShipSignal report — AI Adoption, Delivery Health, and Readiness headline numbers](docs/assets/report-hero.png)
+
 > **Is AI actually changing how your team ships — and can you prove it without overclaiming?**
 > One read-only, local command points at any repo and tells you three things: how much AI is *actually* being used (measured from commit trailers, not guessed), whether delivery health is sound (graded against general engineering norms, never falsely credited to AI), and whether the repo is set up for agents to succeed — with the specific fixes. The only scanner honest enough to withhold a number it can't back up.
 
