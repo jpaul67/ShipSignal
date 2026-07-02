@@ -14,12 +14,25 @@ main (`gh workflow run live-badge` to trigger manually), and the README badge re
 [PR #5](https://github.com/jpaul67/ShipSignal/pull/5)). Verified live on that PR: comment
 posted, upserted in place across 3 follow-up pushes (never duplicated), and the fork-safety
 degrade path (token lacks write access → `::notice::`, job still passes) confirmed via a
-temporary permission drop + revert. Not yet released to PyPI/tagged — held to land together
-with Package C and the pending security-audit fixes as **v0.8.0**. The floating `v1` Action tag
-and the external `shipsignal-smoke` verification are deferred to that release step.
+temporary permission drop + revert.
 
-**Not started: rest of Train 2 (Package C), and Trains 3–4** (Packages C, G, I, F, D — see the
-table below). Pick up with whichever package/train is next.
+**Status (2026-07-02): Package C mostly done.** README hero image
+(`docs/assets/report-hero.png`) and social-preview image (`docs/assets/social-preview.png`,
+manually uploaded via repo Settings) are live on `main`. CLI demo GIF explicitly skipped (Windows
+tooling friction, low value over the hero image). Marketplace listing is prepped (`action.yml`
+name/branding already release-ready; category suggestion: Code quality primary, Continuous
+integration secondary) but not published — that's a one-time, owner-only checkbox when drafting
+the GitHub Release below.
+
+**In progress (2026-07-02): v0.8.0 release**, bundling Package A + Package C + the
+pending security-audit fixes (already merged to `main`, just not yet version-bumped). CHANGELOG
+promoted to `[0.8.0]`, `pyproject.toml` + `__init__.py` bumped to `0.8.0`. Remaining steps: tag
+`v0.8.0` + push (triggers PyPI publish), verify on PyPI, re-point the floating `v1` Action tag,
+re-verify via the external `shipsignal-smoke` repo, then draft the GitHub Release (with the
+Marketplace checkbox — manual, owner-only).
+
+**Not started: Trains 3–4** (Packages G, I, F, D — see the table below). Pick up after v0.8.0 is
+live.
 
 ## Read-first for every agent (non-negotiable repo rules)
 

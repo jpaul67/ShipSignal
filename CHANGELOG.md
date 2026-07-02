@@ -9,7 +9,12 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-02
+
 ### Added
+- **README hero image + social-preview card.** The README now leads with a screenshot of a
+  rendered report instead of another paragraph of prose (`docs/assets/report-hero.png`), and the
+  repo has a 1280×640 social-preview image (`docs/assets/social-preview.png`) for link previews.
 - **GitHub Action: sticky PR comments.** New `pr-comment` input posts a compact Markdown comment
   (score, grade, pass/fail, top 3 fixes by payoff) on the triggering pull request, and keeps it
   updated in place via a hidden `<!-- shipsignal-report -->` marker rather than stacking
