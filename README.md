@@ -99,6 +99,10 @@ jobs:
           fail-under: "80"   # omit to report without failing the build
 ```
 
+Add `pr-comment: "true"` (and `permissions: pull-requests: write`) to get a sticky PR comment —
+score, grade, top 3 fixes — that updates in place on every push instead of a summary tab nobody
+opens. See [examples/workflows/pr-comment.yml](examples/workflows/pr-comment.yml).
+
 Full inputs/outputs and more examples: [docs/github-action.md](docs/github-action.md).
 
 ## Project layout

@@ -31,6 +31,14 @@ inputs:
     description: "Extra arguments passed through to `shipsignal scan` (e.g. --badge badge.svg)."
     required: false
     default: ""
+  pr-comment:
+    description: >-
+      Post (and keep updated) a sticky PR comment with the score, grade, and top fixes
+      ('true' or 'false'). Only fires on pull_request/pull_request_target events. Requires
+      `permissions: pull-requests: write` on the calling workflow; degrades to a log notice
+      (never fails the job) if the token can't write comments, e.g. on a fork PR.
+    required: false
+    default: "false"
 
 outputs:
   score:
@@ -62,6 +70,9 @@ runs:
         INPUT_FAIL_UNDER: ${{ inputs.fail-under }}
         INPUT_SUMMARY: ${{ inputs.summary }}
         INPUT_ARGS: ${{ inputs.args }}
+        INPUT_PR_COMMENT: ${{ inputs.pr-comment }}
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
         work="$(mktemp -d)"
@@ -98,6 +109,55 @@ runs:
 
         if [ "$INPUT_SUMMARY" = "true" ]; then
           cat "$md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        # Sticky PR comment: posted before the pass/fail gate below so it always
+        # appears, even on a failing score. Only fires when the event carries a PR
+        # number (pull_request / pull_request_target); silently skipped on push.
+        if [ "$INPUT_PR_COMMENT" = "true" ] && [ -n "${PR_NUMBER:-}" ]; then
+          comment="$work/comment.md"
+          python - "$json" "$INPUT_FAIL_UNDER" > "$comment" <<'PY'
+        import json, sys
+        data = json.load(open(sys.argv[1]))
+        threshold = sys.argv[2]
+        score, grade = data["score"], data["grade"]
+        ok = threshold == "" or score >= float(threshold)
+        findings = [f for f in data.get("findings", [])
+                    if f.get("severity") == "warn" and not f.get("informational")]
+        findings.sort(key=lambda f: -f.get("points_at_stake", 0.0))
+        top = findings[:3]
+        out = ["<!-- shipsignal-report -->", "",
+               f"### ShipSignal readiness: {score}/100 — grade {grade}"]
+        if threshold:
+            out.append(("✅ passed" if ok else "❌ below") + f" threshold {threshold}")
+        out.append("")
+        if top:
+            out.append("**Top fixes (highest payoff first):**")
+            for f in top:
+                pts = f.get("points_at_stake", 0.0)
+                out.append(f"- **{f.get('area', '')}** — {f['evidence']} (≈+{pts:g} pts)  ")
+                out.append(f"  → {f['fix']}")
+        else:
+            out.append("No outstanding fixes — nicely set up. ✓")
+        out += ["", "<sub>via [ShipSignal](https://github.com/jpaul67/ShipSignal)</sub>"]
+        print("\n".join(out))
+        PY
+
+          # The marker below must match the one the Python block prints above.
+          existing_id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- shipsignal-report -->"))][0].id // empty' \
+            2>/dev/null || true)"
+
+          if [ -n "$existing_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing_id" \
+              -f body=@"$comment" >/dev/null 2>&1 \
+              || echo "::notice::shipsignal: could not update the PR comment (read-only token, e.g. a fork PR?) — skipping"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body=@"$comment" >/dev/null 2>&1 \
+              || echo "::notice::shipsignal: could not post a PR comment (read-only token, e.g. a fork PR?) — skipping"
+          fi
         fi
 
         if [ "$passed" = "false" ]; then

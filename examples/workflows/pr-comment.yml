@@ -1,0 +1,24 @@
+# Copy this into your repo at .github/workflows/shipsignal.yml
+#
+# Gates readiness on every push/PR AND posts a sticky PR comment (score, grade,
+# top 3 fixes) that updates in place on every push to the PR — see
+# docs/github-action.md#pr-comments for the full write-up (fork-PR caveat, etc.).
+
+name: readiness
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  pull-requests: write   # required for the Action to post/update the PR comment
+
+jobs:
+  shipsignal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jpaul67/ShipSignal@v1
+        with:
+          fail-under: "80"   # remove to report without ever failing the job
+          pr-comment: "true"
