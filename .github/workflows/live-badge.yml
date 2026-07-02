@@ -7,8 +7,8 @@
 # One-time setup:
 #   1. Create a gist to hold the badge JSON (note the returned ID):
 #        gh gist create --public -d "shipsignal readiness badge" <(echo '{}')
-#   2. Create a fine-grained PAT (or classic token) with `gist` scope and add
-#      it as a repo secret named GIST_TOKEN.
+#   2. Create a classic PAT with `gist` scope (fine-grained tokens don't cover
+#      the Gist API) and add it as a repo secret named GIST_TOKEN.
 #   3. Set GIST_ID below (or as a repo variable) to the ID from step 1.
 #   4. Paste this into your README, replacing <gist-id> and <github-user>:
 #        ![readiness](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/<github-user>/<gist-id>/raw/badge.json)
@@ -18,6 +18,7 @@ name: live-badge
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   publish-badge:
