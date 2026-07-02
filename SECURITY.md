@@ -7,8 +7,8 @@ release — please upgrade to the newest version before reporting.
 
 | Version | Supported |
 |---------|-----------|
-| 0.6.x   | ✅        |
-| < 0.6   | ❌        |
+| 0.7.x   | ✅        |
+| < 0.7   | ❌        |
 
 ## Reporting a vulnerability
 
@@ -34,7 +34,8 @@ means.
 - Run **read-only** git commands (`git log`, `git ls-files`, `git rev-list`, and an optional
   `git clone`) as argument lists — never through a shell, so there is no shell-injection
   surface. Git invocations carry `gc.auto=0` / `maintenance.auto=false` so the tool can't even
-  incidentally mutate the repo it scans.
+  incidentally mutate the repo it scans, and `clone` puts a `--` separator before the URL so
+  an attacker-controlled target string can never be parsed as a git option.
 - Optionally `git clone` a URL **you explicitly pass** on the command line. That clone is the
   only outbound network action in the entire tool, and it only happens when you point
   ShipSignal at a remote instead of a local path.

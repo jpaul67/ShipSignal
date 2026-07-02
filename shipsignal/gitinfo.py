@@ -144,7 +144,9 @@ def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tu
     flt = ["--filter=blob:none"] if treeless else []
     try:
         res = subprocess.run(
-            ["git", "clone", *flt, "--single-branch", url, str(dest)],
+            # `--` stops option parsing so a URL starting with `-` (e.g.
+            # `--upload-pack=...`) can never be interpreted as a git flag.
+            ["git", "clone", *flt, "--single-branch", "--", url, str(dest)],
             capture_output=True,
             text=True,
             timeout=timeout,

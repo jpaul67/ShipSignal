@@ -9,6 +9,13 @@ are git-tagged).
 
 ## [Unreleased]
 
+### Fixed
+- **Security hardening from a repo audit**: `gitinfo.clone` now puts a `--` separator before the
+  URL argument, so a hostile target string starting with `-` can never be parsed as a `git`
+  option (argument injection, not shell injection — clone was already argv-based). Added
+  `permissions: contents: read` to `ci.yml` and `live-badge.yml` (least-privilege for the
+  default `GITHUB_TOKEN`). `SECURITY.md`'s supported-versions table now tracks `0.7.x`.
+
 ## [0.7.0] — 2026-07-01
 
 ### Added

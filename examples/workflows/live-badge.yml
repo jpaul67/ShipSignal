@@ -20,6 +20,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The default GITHUB_TOKEN only needs to check the repo out; the actual gist
+# write uses GIST_TOKEN (a separate classic PAT), not this token.
+permissions:
+  contents: read
+
 jobs:
   publish-badge:
     runs-on: ubuntu-latest
