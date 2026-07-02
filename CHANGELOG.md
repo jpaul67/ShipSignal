@@ -21,6 +21,12 @@ are git-tagged).
   enabled secret scanning + push protection + Dependabot security updates, added a tag-scoped
   (`v*.*.*`) deployment policy on the `pypi` environment, and minimal `main` branch protection
   (blocks force-push/deletion only — no PR requirement, so direct pushes still work).
+- **CI**: `ci.yml`'s `test` job now checks out full history (`fetch-depth: 0`). The self-scan
+  dogfood tests (`TestSelfImpact` et al.) walk this repo's own git log; a shallow depth-1
+  checkout leaves only whatever single commit triggered the run, which on a `pull_request` event
+  is the synthetic PR-merge commit — surfaced the first time this repo got a real PR (Dependabot's
+  first bump), where that commit was bot-attributed and got misclassified as "no development
+  commits to analyze."
 
 ## [0.7.0] — 2026-07-01
 

@@ -16,19 +16,17 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
+      # fetch-depth: 0 (full history) — the self-scan dogfood tests below walk this
+      # repo's own git log (TestSelfImpact et al.); a shallow depth-1 checkout leaves
+      # only whatever single commit triggered the run, which on a pull_request event
+      # is the synthetic PR-merge commit, occasionally attributed to a bot account
+      # (e.g. dependabot) and misclassified as "no development commits to analyze".
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: TEMP debug git state
-        shell: bash
-        run: |
-          echo "--- rev-list count ---"
-          git rev-list --count HEAD
-          echo "--- log ---"
-          git log --format='%H|%ae|%s' -5
-          echo "--- no-merges numstat raw (first 40 lines) ---"
-          git log --no-merges --numstat --format='__BWREC__%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:only,unfold)' | head -40
       - name: Tests
         run: python -m unittest discover -s tests -v
       - name: Self-scan (dogfood gate)
