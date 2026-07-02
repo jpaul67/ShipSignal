@@ -1,8 +1,9 @@
 # ShipSignal post-launch roadmap — agent handoff plan
 
 Written 2026-07-01, just after the repo went public (v0.6.6 on PyPI, Action live at
-`jpaul67/ShipSignal@v1`, external smoke test verified). Nine work packages, grouped into four
-release trains. Each package is written to be handed to a separate agent with no other context.
+`jpaul67/ShipSignal@v1`, external smoke test verified). Twelve work packages, grouped into six
+release trains (re-planned 2026-07-02 — see the status notes). Each package is written to be
+handed to a separate agent with no other context.
 
 **Status (2026-07-01): Train 1 (Packages E, H, B) SHIPPED.** Code, tests, and docs landed on
 `main`, released as **v0.7.0** (tagged, PyPI publish verified live), and the live-badge dogfood
@@ -24,8 +25,13 @@ externally via `shipsignal-smoke` (now a permanent fixture at
 `C:\Users\jerem\code\shipsignal-smoke`, not a throwaway — its workflow now also covers
 `pr-comment` mode via an actual PR, verified live and then closed).
 
-**Not started: Trains 3–4** (Packages G, I, F, D — see the table below). Pick up whichever's
-next.
+**Re-planned 2026-07-02 (post-v0.8.0):** three impact-lens packages added — **J** (outcome
+signals: revert pairs → time-to-correction), **K** (release cadence & lead time from tags),
+**L** (AI line survival) — and the remaining work re-sequenced into Trains 3–6. Reasoning:
+with no external users yet, the impact-lens differentiators ARE the user acquisition, so they
+move ahead of the team-workflow features; I and F slide to a demand-triggered Train 6. One
+hard dependency: L lands after D (squash recovery fixes the attribution L's comparison
+depends on). **Not started: Trains 3–6.** Pick up Train 3 next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 
@@ -56,13 +62,21 @@ next.
 |---|---|---|---|
 | 1 | v0.7.0 | E (AI registry) · H (CLI color) · B (badge endpoint) | quick wins, better core number |
 | 2 | v0.8.0 | A (Action PR comments) · C (marketing/visuals) | growth loops |
-| 3 | v0.9.0 | G (config file) · I (compare command) · F (`fix` scaffolding) | team adoption |
-| 4 | v0.10.0 | D (squash recovery from exported PR data) | flagship — closes the measurement gap |
+| 3 | v0.9.0 | G (config file) · J (outcome signals) · K (release cadence) | "DORA-shaped proxies, zero integrations" |
+| 4 | v0.10.0 | D (squash recovery from exported PR data) | flagship 1 — closes the measurement gap |
+| 5 | v0.11.0 | L (AI line survival) | flagship 2 — the acceptance-rate metric |
+| 6 | v0.12.0 | I (compare command) · F (`fix` scaffolding) | team workflow — demand-triggered |
 
-Rationale for ordering: Train 1 is small and sharpens the product before more eyes arrive.
-Train 2 is the visibility loop and should land while launch attention exists. Train 3 is what
-the first real team will ask for. Train 4 is the flagship and depends on Train 1's matcher
-work (see the dependency note in Package D), so it goes last.
+Rationale for ordering: Train 1 was small and sharpened the product before more eyes arrived;
+Train 2 was the visibility loop, landed while launch attention existed (both shipped). The
+re-sequenced tail (2026-07-02): Train 3 upgrades every scan with zero user friction and gives
+the README its strongest hook — G rides along because J/K/L hang config keys off it (a soft
+dependency; CLI flags and built-in defaults work without it). Train 4 is unchanged, and is now
+also the prerequisite for honest survival numbers (squash misattribution would contaminate
+L's comparison group). Train 5 ships the second flagship alone. Train 6 is what the first
+real team will ask for — let real user signal (an issue, a star spike, someone asking)
+trigger it rather than a schedule; F can be pulled forward alone as a quick win between big
+trains if a demo moment is wanted.
 
 ---
 
@@ -256,7 +270,9 @@ default `fail-under`, default `--squash`.
    badge_label = "readiness"
    ```
    Validate strictly: unknown keys → warning (not error); wrong types → clear error naming the
-   key. Never crash a scan because of a config typo.
+   key. Never crash a scan because of a config typo. Packages K and L add keys under
+   `[impact]` later (`release_tag_pattern`; a `survival` block) — the warn-on-unknown-keys
+   rule keeps the schema additive.
 2. Precedence: CLI flag > config file > built-in default. Document this rule in one place
    (glossary or docs) and enforce it in `cli.py` wiring.
 3. Wire into: `impact.py` (alias merge, squash), `scanner.py`/`modules.py` (excludes),
@@ -275,73 +291,93 @@ malformed config degrades with a readable warning; suite + ruff + dogfood green.
 
 ---
 
-## Package I — `compare` command: snapshot-free ref-to-ref diff (Train 3)
+## Package J — Outcome signals: revert pairs & time-to-correction (Train 3)
 
-**Goal:** `trend` requires prior snapshots, so a new user's first delta experience is "come
-back later". `shipsignal compare <ref-A> [<ref-B>]` scans two git refs of the same repo and
-diffs readiness.
+**Goal:** Delivery Health measures *habits* (change size, tests, knowledge distribution) but
+no *outcomes*: how often changes get reverted or fixed, and how fast. Both are computable
+from commit metadata alone. Together with Package K this is the "DORA-shaped proxies, zero
+integrations" story.
 
 **Steps:**
-1. Read `shipsignal/trend.py` (delta rendering to reuse), `snapshot.py` (schema), `gitinfo.py`
-   (git helpers), `cli.py`.
-2. New subcommand `compare`: `shipsignal compare <target> --from <ref> [--to <ref, default HEAD>]`.
-   Materialize each ref read-only — `git worktree add --detach <tmp> <ref>` (clean up in
-   `finally`; fall back to `git archive | tar -x` into temp if worktrees are unavailable).
-   NEVER touch the user's working tree or index.
-3. Run the readiness pipeline on both trees. **Scope: readiness only** — impact is inherently
-   longitudinal and `trend` already owns that; say so in the docs.
-4. Note: doc-freshness signals need git history; inside a detached worktree `git log` still
-   works (shared object store) — verify, and mark freshness *indeterminate* if a case breaks.
-5. Render: reuse/extract the trend delta view — score delta, per-category deltas, fixes
-   resolved / introduced / unchanged. Text + `--md`/`--html`/`--json`.
-6. Honesty rails (mirror `trend`'s): if the `--from` tree predates detectors' assumptions or a
-   category flips to n/a, label it rather than implying regression.
-7. Tests: fixture repo with two tagged states (one with docs added between them); assert
-   deltas and fix-resolution diffs; cleanup-on-error test.
-8. Docs: README (new command in Output/commands area), `docs/getting-started.md`, `CLAUDE.md`
-   commands, `shipsignal/README.md` if a new module is added, CHANGELOG.
+1. Read `shipsignal/impact.py` — `walk_history` already collects subjects and trailers, and a
+   fix/revert share already renders as unscored context — plus the impact renderers in
+   `report.py`.
+2. **Solid core first: revert pairs.** Git's own revert format is an explicit edge — subject
+   `Revert "<subject>"` + body `This reverts commit <sha>.` Parse the target sha, match it
+   against the analyzed commit set, and compute **time-to-correction** = revert date − target
+   date. Report the median + the pair count. Also honor explicit `Fixes: <sha>` /
+   `Reverts: <sha>` trailers. Only count pairs whose target is inside the analyzed history;
+   disclose how many reverts didn't match. Test the revert-of-a-revert edge.
+3. **The change-failure proxy stays context, never scored.** Relabel the existing fix/revert
+   share as the change-failure proxy and attach its caveat: it measures *commit-labeling
+   discipline* as much as failure rate — a repo with honest `fix:` conventions must never
+   score worse than a vague-message repo. Folding it into the delivery-health score is
+   forbidden; the caveat text lives in `glossary.py`.
+4. Render a new "Outcomes" block in the impact text/md/html output: revert-pair count, median
+   time-to-correction, the relabeled change-failure context line. Sample floor: fewer than 3
+   revert pairs → "n/a — too few revert pairs to time" (same honest-degrade style as breadth).
+5. Scoring promotion is OUT of scope for this package: everything ships as displayed
+   numbers/flags. Whether time-to-correction ever joins the delivery-health score is a
+   separate post-calibration decision.
+6. Copy in `glossary.py`: what each number measures, the labeling-discipline caveat, and the
+   not-MTTR disclaimer (time-to-correction is commit-scoped; incidents aren't in git).
+7. Tests: fixture histories with real `git revert` commits — happy path, revert-of-revert,
+   target outside the window, trailer forms, floor behavior, renderer output.
+8. Re-run the calibration trio (crown / chalk / vitest); the numbers must be explainable
+   before merge.
+9. Docs checklist: README (Impact section gains the Outcomes block, honest framing),
+   `docs/getting-started.md`, `CLAUDE.md` (new gotcha: the change-failure proxy is never
+   scored), CHANGELOG.
 
-**Acceptance:** `shipsignal compare . --from v0.6.6` runs on this repo and shows real deltas;
-no residue in `git worktree list` after runs (including failed ones); suite green.
+**Acceptance:** revert pairs + median time-to-correction render on a fixture and at least one
+calibration repo; the change-failure proxy remains unscored with its caveat visible;
+sub-floor repos degrade honestly; suite + ruff + dogfood green.
 
 ---
 
-## Package F — `shipsignal fix`: apply the quick wins (Train 3)
+## Package K — Release cadence & lead time from tags (Train 3)
 
-**Goal:** the scanner already detects the test command, modules, CI, and ranks fixes with
-starter snippets (`snippets.py`). Let it *generate* the scaffolds — grader becomes fixer.
+**Goal:** deploy-frequency and lead-time proxies from version tags — the other half of the
+DORA story, from data already in the clone.
 
 **Steps:**
-1. Read `shipsignal/snippets.py`, `scanner.py`, `detectors.py`, and how fixes carry snippets
-   into reports.
-2. New subcommand `fix`: **dry-run by default** — prints what it would create and the payoff
-   estimate per file (reuse the existing ≈+N pts machinery). `--apply` writes.
-3. Scope of generatable artifacts (v1, keep tight):
-   - Starter `AGENTS.md` (or `CLAUDE.md` — pick ONE default, recommend `AGENTS.md` as the
-     vendor-neutral standard; `--style claude` for the other) populated from *detected facts*:
-     real test command, real module list, detected CI, detected lint/format tools. No
-     placeholder lorem — if a fact wasn't detected, omit the section.
-   - Module README stubs for undocumented modules (title + "what/why/key files" skeleton
-     seeded with the module's top-level filenames).
-   - `.editorconfig` / CONTRIBUTING stub only if the corresponding fix is in the ranked list.
-4. Safety rails: NEVER overwrite an existing file (skip + say why); everything written is
-   plain text in the target repo; `--apply` prints a summary of files created; respect
-   `.gitignore`d module exclusions same as the scanner.
-5. Close the loop: after `--apply`, re-run the scorer and print before → after readiness
-   (this is the demo moment — "62 → 78 in one command").
-6. Tests: dry-run output, apply-once idempotency (second run creates nothing), no-overwrite
-   guarantee, generated AGENTS.md contains the fixture repo's real test command.
-7. Docs: README (headline feature — new section with the before→after example),
-   `docs/getting-started.md`, `CLAUDE.md` commands + a new gotcha ("fix never overwrites"),
-   `shipsignal/README.md` module map, CHANGELOG. Consider a README GIF of the before→after.
+1. Read `shipsignal/gitinfo.py` (subprocess helpers) and the impact context rendering.
+2. Collect tags in one pass:
+   `git for-each-ref refs/tags --format='%(refname:short)%x1f%(creatordate:unix)'` —
+   `creatordate` resolves correctly for both annotated tags (tag date) and lightweight tags
+   (commit date).
+3. Filter to release-shaped tags: default pattern is semver-ish (`v?N.N[.N]`), overridable
+   via `release_tag_pattern` under `[impact]` in `.shipsignal.toml` (coordinate the key name
+   with Package G, same train). Monorepo per-package tags (`pkg@1.2.3`) are the motivating
+   case for the override.
+4. **Release cadence** (deploy-frequency proxy): tags-per-month + median inter-tag gap over
+   the trailing 12 months; fall back to the full window when sparse, and disclose which
+   window was used.
+5. **Lead time** (proxy): for each consecutive tag pair (T1, T2], commits from
+   `git log T1..T2 --no-merges --format=%ct` get release date = date(T2); lead time =
+   date(T2) − commit date; report the median. One log call per window — linear, no
+   per-commit subprocesses.
+6. Honest degrade: no tags, or fewer than 3 release-shaped tags → "n/a — no release tags
+   found". Tags ≠ deploys (services deploy without tagging) — the copy must say so, and an
+   untagged repo is never penalized.
+7. Ship as displayed context, not scored — same rule as Package J.
+8. Copy in `glossary.py`: proxies-not-DORA framing.
+9. Tests: fixture repo with annotated + lightweight + noise tags; pattern filter + config
+   override; trailing-window fallback; the n/a path.
+10. Calibration trio, then docs: README — with J landed, this is the moment to write the
+    "DORA-shaped proxies from git history alone, zero integrations" framing honestly: deploy
+    frequency ✓, lead time ✓, change-failure proxy ✓ (context), time-to-restore ✗ (incidents
+    aren't in git — saying so is on-brand). Also `docs/getting-started.md`, CHANGELOG.
 
-**Acceptance:** on a bare fixture repo, `fix --apply` measurably raises the score and a
-second run is a no-op; on ShipSignal itself, `fix` reports nothing to do (dogfood).
+**Acceptance:** a tagged calibration repo (chalk) shows cadence + lead time; an untagged
+fixture degrades to n/a; the pattern override works via config; suite + ruff + dogfood green.
 
 ### Train 3 release steps
 CHANGELOG → `## [0.9.0]`; version bumps (both files); tag `v0.9.0`; verify PyPI;
 `uvx shipsignal@0.9.0` smoke.
-(Ship G, I, F in that order; if F slips, release G+I as 0.9.0 and F as 0.9.1 — don't hold it.)
+(Ship G first — J and K hang config keys off it — then J and K in either order; if one slips,
+release what's ready as 0.9.0 and the straggler as 0.9.1 — don't hold the train. Nothing in
+this train touches `action.yml`, so no `v1` retarget.)
 
 ---
 
@@ -405,12 +441,147 @@ command (crown does not qualify — it's direct-to-main; pick a real squash-merg
 
 **Dependency note:** land AFTER Package E (token-aware matcher) — recovered co-authors flow
 through the same matcher, and short aliases must not false-positive on PR-author emails.
+Package L (line survival) depends on THIS package in turn — its recovered attribution feeds
+survival's comparison groups; land D before L.
 
 ### Train 4 release steps
 This is the headline release: CHANGELOG → `## [0.10.0]` with a proper narrative entry;
 version bumps; tag; PyPI verify; consider whether this is actually `v1.0.0` — decide with the
 user at release time (the feature completes the original honesty story, which is a defensible
 1.0 line).
+
+---
+
+## Package L — AI line survival (Train 5, flagship 2)
+
+**Goal:** adoption says AI was in the room; survival says the work *stuck*. Blame the current
+tree, attribute surviving lines to AI-assisted vs other commits, and compare — the
+acceptance-rate metric nobody else computes locally. This is the hardest package to keep
+honest; the rails below are acceptance criteria, not suggestions.
+
+**Hard dependency: land AFTER Package D.** Squash merges strip trailers and misattribute AI
+lines into the "other" comparison group — worse than undercounting, it contaminates the
+baseline. Survival must consume the same attribution D produces (measured trailers, plus
+recovered PR data when `--pr-data` is given) and must carry the squash caveat whenever it
+fires without recovery.
+
+**Steps:**
+1. Read `shipsignal/impact.py` (`walk_history` — per-commit added-line counts from numstat
+   already exist, as does the AI commit set), `prdata.py` (Package D), `gitinfo.py`.
+2. **Blame engine — metadata only.** New `shipsignal/survival.py` running
+   `git blame --incremental -w <file>`, which emits attribution ranges (commit sha, line
+   counts) and NO file content. This is the only acceptable form — parsing default
+   `git blame` output reads source lines and violates the never-read-content rule. State
+   that in a code comment at the parser.
+3. Mechanics: `git ls-files` the current tree → skip binaries (numstat's `-` convention) →
+   per-file incremental blame → surviving-line count per commit → join against the AI/other
+   commit sets → per-commit survival = surviving ÷ added.
+4. **Age-matching is mandatory.** AI commits are systematically younger, and young lines have
+   had less time to die — the naive pooled comparison flatters AI. v1 design: restrict to
+   commits ≥ 90 days old inside the shared post-adoption window, bucket by month, compare AI
+   vs other survival within matched buckets (+ an age-weighted overall line). A unit test
+   must prove the rendered number is NOT the naive pooled one.
+5. Withholding floors: either group < 20 commits or < 500 attributed lines → withhold the
+   comparison ("not enough matched history to compare") and render coverage only.
+6. **Cost control:** opt-in via `--survival` on `impact` and `report` (default off — default
+   output stays byte-identical). Deterministic sampling cap (e.g. 400 files / 200k blamed
+   lines, stable file order) with the sampling disclosed in the output. Config keys under
+   `[impact]` (additive to Package G's schema).
+7. Naming + caveats in `glossary.py`: "line survival of AI-assisted commits" — attribution
+   is commit-level (humans edit AI output before committing, and vice versa); reformat/rename
+   caveat (`-w` only mitigates whitespace); the squash-caveat integration from the dependency
+   note.
+8. Tests: scripted fixture history (AI + human commits, deletions, a reformat commit);
+   incremental-format parser units; the age-matching test from step 4; floors; opt-in
+   byte-identity; sampling determinism.
+9. Calibration trio — crown is the interesting one (Pervasive adoption). Write up whether
+   the numbers are explainable BEFORE merge.
+10. Docs checklist: README (flagship section — write the honest framing first, then the
+    feature), `docs/getting-started.md`, `CLAUDE.md` (new gotchas: blame is `--incremental`
+    only; survival is opt-in), `shipsignal/README.md` (+`survival.py`), CHANGELOG; re-read
+    `SECURITY.md` to confirm the zero-network wording still holds (it should — blame is
+    local git).
+
+**Acceptance:** survival numbers on a scripted fixture are hand-checkable; the age-matched
+comparison is enforced by test; default (no flag) output byte-identical; capped runtime stays
+interactive on a chalk-sized repo (measure and document it); withholds below floors; suite +
+ruff + dogfood green.
+
+### Train 5 release steps
+CHANGELOG → `## [0.11.0]` with a narrative entry (flagship 2 — the acceptance-rate story);
+version bumps (both files); tag; PyPI verify; `uvx` smoke. No `action.yml` change — no `v1`
+retarget.
+
+---
+
+## Package I — `compare` command: snapshot-free ref-to-ref diff (Train 6)
+
+**Goal:** `trend` requires prior snapshots, so a new user's first delta experience is "come
+back later". `shipsignal compare <ref-A> [<ref-B>]` scans two git refs of the same repo and
+diffs readiness.
+
+**Steps:**
+1. Read `shipsignal/trend.py` (delta rendering to reuse), `snapshot.py` (schema), `gitinfo.py`
+   (git helpers), `cli.py`.
+2. New subcommand `compare`: `shipsignal compare <target> --from <ref> [--to <ref, default HEAD>]`.
+   Materialize each ref read-only — `git worktree add --detach <tmp> <ref>` (clean up in
+   `finally`; fall back to `git archive | tar -x` into temp if worktrees are unavailable).
+   NEVER touch the user's working tree or index.
+3. Run the readiness pipeline on both trees. **Scope: readiness only** — impact is inherently
+   longitudinal and `trend` already owns that; say so in the docs.
+4. Note: doc-freshness signals need git history; inside a detached worktree `git log` still
+   works (shared object store) — verify, and mark freshness *indeterminate* if a case breaks.
+5. Render: reuse/extract the trend delta view — score delta, per-category deltas, fixes
+   resolved / introduced / unchanged. Text + `--md`/`--html`/`--json`.
+6. Honesty rails (mirror `trend`'s): if the `--from` tree predates detectors' assumptions or a
+   category flips to n/a, label it rather than implying regression.
+7. Tests: fixture repo with two tagged states (one with docs added between them); assert
+   deltas and fix-resolution diffs; cleanup-on-error test.
+8. Docs: README (new command in Output/commands area), `docs/getting-started.md`, `CLAUDE.md`
+   commands, `shipsignal/README.md` if a new module is added, CHANGELOG.
+
+**Acceptance:** `shipsignal compare . --from v0.6.6` runs on this repo and shows real deltas;
+no residue in `git worktree list` after runs (including failed ones); suite green.
+
+---
+
+## Package F — `shipsignal fix`: apply the quick wins (Train 6)
+
+**Goal:** the scanner already detects the test command, modules, CI, and ranks fixes with
+starter snippets (`snippets.py`). Let it *generate* the scaffolds — grader becomes fixer.
+
+**Steps:**
+1. Read `shipsignal/snippets.py`, `scanner.py`, `detectors.py`, and how fixes carry snippets
+   into reports.
+2. New subcommand `fix`: **dry-run by default** — prints what it would create and the payoff
+   estimate per file (reuse the existing ≈+N pts machinery). `--apply` writes.
+3. Scope of generatable artifacts (v1, keep tight):
+   - Starter `AGENTS.md` (or `CLAUDE.md` — pick ONE default, recommend `AGENTS.md` as the
+     vendor-neutral standard; `--style claude` for the other) populated from *detected facts*:
+     real test command, real module list, detected CI, detected lint/format tools. No
+     placeholder lorem — if a fact wasn't detected, omit the section.
+   - Module README stubs for undocumented modules (title + "what/why/key files" skeleton
+     seeded with the module's top-level filenames).
+   - `.editorconfig` / CONTRIBUTING stub only if the corresponding fix is in the ranked list.
+4. Safety rails: NEVER overwrite an existing file (skip + say why); everything written is
+   plain text in the target repo; `--apply` prints a summary of files created; respect
+   `.gitignore`d module exclusions same as the scanner.
+5. Close the loop: after `--apply`, re-run the scorer and print before → after readiness
+   (this is the demo moment — "62 → 78 in one command").
+6. Tests: dry-run output, apply-once idempotency (second run creates nothing), no-overwrite
+   guarantee, generated AGENTS.md contains the fixture repo's real test command.
+7. Docs: README (headline feature — new section with the before→after example),
+   `docs/getting-started.md`, `CLAUDE.md` commands + a new gotcha ("fix never overwrites"),
+   `shipsignal/README.md` module map, CHANGELOG. Consider a README GIF of the before→after.
+
+**Acceptance:** on a bare fixture repo, `fix --apply` measurably raises the score and a
+second run is a no-op; on ShipSignal itself, `fix` reports nothing to do (dogfood).
+
+### Train 6 release steps
+CHANGELOG → `## [0.12.0]`; version bumps (both files); tag; PyPI verify; smoke.
+(Demand-triggered train — let a real user signal start it. Ship I and F in either order; if
+one slips, same don't-hold rule as Train 3. F can also be pulled forward as a standalone
+quick win between big trains if a demo moment is wanted.)
 
 ---
 
