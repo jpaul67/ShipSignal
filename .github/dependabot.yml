@@ -1,0 +1,9 @@
+version: 2
+updates:
+  # Actions are pinned to commit SHAs (see workflow comments for the tag each
+  # SHA corresponds to); Dependabot opens a PR to bump the SHA when the tag
+  # moves, so pinning doesn't mean going stale.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -15,6 +15,12 @@ are git-tagged).
   option (argument injection, not shell injection — clone was already argv-based). Added
   `permissions: contents: read` to `ci.yml` and `live-badge.yml` (least-privilege for the
   default `GITHUB_TOKEN`). `SECURITY.md`'s supported-versions table now tracks `0.7.x`.
+- All third-party Actions (`actions/checkout`, `actions/setup-python`, `actions/upload-artifact`,
+  `actions/download-artifact`, `pypa/gh-action-pypi-publish`) are now pinned to commit SHAs
+  instead of floating tags, with `.github/dependabot.yml` added to keep them current. Repo-side:
+  enabled secret scanning + push protection + Dependabot security updates, added a tag-scoped
+  (`v*.*.*`) deployment policy on the `pypi` environment, and minimal `main` branch protection
+  (blocks force-push/deletion only — no PR requirement, so direct pushes still work).
 
 ## [0.7.0] — 2026-07-01
 
