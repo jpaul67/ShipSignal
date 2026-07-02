@@ -10,29 +10,22 @@ loop is running in production — the `live-badge` workflow republishes the gist
 main (`gh workflow run live-badge` to trigger manually), and the README badge renders from it.
 `GIST_TOKEN` (classic PAT, `gist` scope) and `GIST_ID` are set as a repo secret/variable.
 
-**Status (2026-07-02): Package A (Action PR-comment mode) SHIPPED to `main`** (merged via
-[PR #5](https://github.com/jpaul67/ShipSignal/pull/5)). Verified live on that PR: comment
-posted, upserted in place across 3 follow-up pushes (never duplicated), and the fork-safety
-degrade path (token lacks write access → `::notice::`, job still passes) confirmed via a
-temporary permission drop + revert.
+**Status (2026-07-02): Train 2 (Packages A + C) and v0.8.0 SHIPPED.** Package A (Action
+PR-comment mode) merged via [PR #5](https://github.com/jpaul67/ShipSignal/pull/5) — comment
+posted, upserted across 3 follow-up pushes, fork-safety degrade path confirmed live. Package C
+done: README hero image, social-preview image (uploaded), Marketplace listing published (Code
+quality / Continuous integration categories) at
+[github.com/marketplace/actions/shipsignal-readiness-gate](https://github.com/marketplace/actions/shipsignal-readiness-gate);
+CLI demo GIF explicitly skipped (Windows tooling friction, low value over the hero image).
 
-**Status (2026-07-02): Package C mostly done.** README hero image
-(`docs/assets/report-hero.png`) and social-preview image (`docs/assets/social-preview.png`,
-manually uploaded via repo Settings) are live on `main`. CLI demo GIF explicitly skipped (Windows
-tooling friction, low value over the hero image). Marketplace listing is prepped (`action.yml`
-name/branding already release-ready; category suggestion: Code quality primary, Continuous
-integration secondary) but not published — that's a one-time, owner-only checkbox when drafting
-the GitHub Release below.
+**v0.8.0**: bundled Package A + Package C + the security-hardening pass. Tagged, pushed, PyPI
+publish verified live. Floating `v1` Action tag re-pointed at the release commit and re-verified
+externally via `shipsignal-smoke` (now a permanent fixture at
+`C:\Users\jerem\code\shipsignal-smoke`, not a throwaway — its workflow now also covers
+`pr-comment` mode via an actual PR, verified live and then closed).
 
-**In progress (2026-07-02): v0.8.0 release**, bundling Package A + Package C + the
-pending security-audit fixes (already merged to `main`, just not yet version-bumped). CHANGELOG
-promoted to `[0.8.0]`, `pyproject.toml` + `__init__.py` bumped to `0.8.0`. Remaining steps: tag
-`v0.8.0` + push (triggers PyPI publish), verify on PyPI, re-point the floating `v1` Action tag,
-re-verify via the external `shipsignal-smoke` repo, then draft the GitHub Release (with the
-Marketplace checkbox — manual, owner-only).
-
-**Not started: Trains 3–4** (Packages G, I, F, D — see the table below). Pick up after v0.8.0 is
-live.
+**Not started: Trains 3–4** (Packages G, I, F, D — see the table below). Pick up whichever's
+next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 

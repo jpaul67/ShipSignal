@@ -146,6 +146,6 @@ release of the Action. To pin exactly, reference a full tag or commit SHA instea
 
 ## Marketplace
 
-The Action is currently consumed by repo reference (`jpaul67/ShipSignal@v1`) and is not listed on the
-GitHub Marketplace. The `action.yml` already carries a `branding` block, so listing it later is a
-one-checkbox step when drafting a release.
+Also listed on the [GitHub Marketplace](https://github.com/marketplace/actions/shipsignal-readiness-gate)
+as of the `v0.8.0` release — find it there or reference it directly by repo
+(`jpaul67/ShipSignal@v1`), whichever's more convenient.
