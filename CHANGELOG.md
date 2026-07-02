@@ -9,6 +9,8 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-01
+
 ### Added
 - **GitHub Action** (composite) wrapping `shipsignal scan` — gates the readiness score
   (`fail-under`) and posts the Markdown report to the run's job summary. Pin via the floating
