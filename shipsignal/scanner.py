@@ -87,9 +87,12 @@ def _enrich_findings(findings: list[dict], metrics: dict,
     return findings
 
 
-def scan(root: Path, repo_label: str | None = None) -> dict:
+def scan(root: Path, repo_label: str | None = None,
+        exclude_modules: list[str] | None = None) -> dict:
     files, is_git = mod.list_files(root)
-    modules, agent_files = mod.detect_modules(root, files, is_git)
+    modules, agent_files = mod.detect_modules(
+        root, files, is_git, exclude_prefixes=frozenset(exclude_modules or ())
+    )
     findings, metrics = detectors.run_detectors(root, files, modules, agent_files, is_git)
     setup_findings, setup_metrics = setupcheck.detect_setup(
         root, files, metrics["mcp_present"], modules_total=metrics["modules_total"]

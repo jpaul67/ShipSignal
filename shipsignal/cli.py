@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import ansi, gitinfo, impact, report, scanner, snapshot, trend
+from . import ansi, config, gitinfo, impact, report, scanner, snapshot, trend
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -37,6 +37,16 @@ def _maybe_write_snapshot(args_value, *, readiness=None, impact_result=None,
         out_path = Path(args_value)
     snapshot.write_snapshot(snap, out_path)
     print(f"  wrote snapshot {out_path}")
+
+
+def _load_config(root: Path) -> config.Config:
+    """Load `.shipsignal.toml` and print any warnings (unknown/mistyped keys,
+    a malformed file) to stderr. Never raises — a config typo degrades to
+    defaults, it never blocks a scan."""
+    cfg, warnings = config.load_config(root)
+    for w in warnings:
+        print(f"  config: {w}", file=sys.stderr)
+    return cfg
 
 
 def _looks_like_url(s: str) -> bool:
@@ -81,22 +91,25 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         return 2
     assert root is not None
     try:
-        result = scanner.scan(root, repo_label=label)
+        cfg = _load_config(root)
+        fail_under = args.fail_under if args.fail_under is not None else cfg.readiness.fail_under
+        result = scanner.scan(root, repo_label=label, exclude_modules=cfg.readiness.exclude_modules)
         print(report.render(result, color=ansi.resolve_enabled(args.no_color)))
         for path, payload in (
             (args.json, lambda: json.dumps(result, indent=2)),
             (args.md, lambda: report.render_markdown(result)),
             (args.html, lambda: report.render_html(result)),
-            (args.badge, lambda: report.render_badge(result)),
-            (args.badge_json, lambda: report.render_badge_json(result)),
+            (args.badge, lambda: report.render_badge(result, label=cfg.report.badge_label)),
+            (args.badge_json,
+             lambda: report.render_badge_json(result, label=cfg.report.badge_label)),
         ):
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
                 print(f"  wrote {path}")
         _maybe_write_snapshot(args.snapshot, readiness=result,
                               repo_label=label, root=root)
-        if args.fail_under is not None and result["score"] < args.fail_under:
-            print(f"  FAIL: score {result['score']} < --fail-under {args.fail_under}",
+        if fail_under is not None and result["score"] < fail_under:
+            print(f"  FAIL: score {result['score']} < --fail-under {fail_under}",
                   file=sys.stderr)
             return 1
         return 0
@@ -113,22 +126,27 @@ def _cmd_impact(args: argparse.Namespace) -> int:
         return 2
     assert root is not None
     try:
+        cfg = _load_config(root)
+        squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
         # Readiness runs by default so the three-number header is always complete.
         # --no-readiness skips it (e.g. to save a few seconds on a huge repo).
         readiness_score: int | None = None
         if not args.no_readiness:
             try:
-                readiness_score = scanner.scan(root, repo_label=label)["score"]
+                readiness_score = scanner.scan(
+                    root, repo_label=label, exclude_modules=cfg.readiness.exclude_modules
+                )["score"]
             except Exception as exc:  # pragma: no cover
                 print(f"  warning: readiness scan failed ({exc}); readiness will show n/a",
                       file=sys.stderr)
-        result = impact.compute_impact(
-            root,
-            repo_label=label,
-            adoption_date_override=args.adoption_date,
-            readiness_score=readiness_score,
-            squash_override=args.squash,
-        )
+        with impact.extra_aliases(cfg.impact.extra_ai_aliases):
+            result = impact.compute_impact(
+                root,
+                repo_label=label,
+                adoption_date_override=args.adoption_date,
+                readiness_score=readiness_score,
+                squash_override=squash_override,
+            )
         print(report.render_impact(result, color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
             print(report.render_trajectory_cli(result))
@@ -179,14 +197,19 @@ def _cmd_report(args: argparse.Namespace) -> int:
         return 2
     assert root is not None
     try:
-        readiness_result = scanner.scan(root, repo_label=label)
-        impact_result = impact.compute_impact(
-            root,
-            repo_label=label,
-            adoption_date_override=args.adoption_date,
-            readiness_score=readiness_result.get("score"),
-            squash_override=args.squash,
+        cfg = _load_config(root)
+        squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
+        readiness_result = scanner.scan(
+            root, repo_label=label, exclude_modules=cfg.readiness.exclude_modules
         )
+        with impact.extra_aliases(cfg.impact.extra_ai_aliases):
+            impact_result = impact.compute_impact(
+                root,
+                repo_label=label,
+                adoption_date_override=args.adoption_date,
+                readiness_score=readiness_result.get("score"),
+                squash_override=squash_override,
+            )
         print(report.render_unified(impact_result, readiness_result,
                                     color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
@@ -202,7 +225,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
             (args.json, lambda: json.dumps(combined, indent=2, default=str)),
             (args.md, lambda: report.render_unified_markdown(impact_result, readiness_result)),
             (args.html, lambda: report.render_unified_html(impact_result, readiness_result)),
-            (args.badge_json, lambda: report.render_badge_json(readiness_result)),
+            (args.badge_json, lambda: report.render_badge_json(readiness_result,
+                                                                label=cfg.report.badge_label)),
         ):
             if path:
                 Path(path).write_text(payload(), encoding="utf-8")
@@ -247,7 +271,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="persist a small JSON snapshot for `shipsignal trend` "
                              "(default location: .shipsignal/snapshots/YYYY-MM-DD-<sha>.json)")
     scan_p.add_argument("--fail-under", type=int, default=None, metavar="N",
-                        help="exit non-zero if the score is below N")
+                        help="exit non-zero if the score is below N "
+                             "(default: .shipsignal.toml's [readiness].fail_under, else no gate)")
     scan_p.add_argument("--no-color", action="store_true",
                         help="disable ANSI color in terminal output (also honors NO_COLOR)")
 
@@ -260,9 +285,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     impact_p.add_argument("--no-readiness", action="store_true",
                           help="skip the readiness scan (the Readiness number shows n/a)")
-    impact_p.add_argument("--squash", action="store_true",
+    impact_p.add_argument("--squash", action="store_true", default=None,
                           help="treat the history as squash-merged — flag AI adoption as a "
-                               "floor (for workflows whose squash commits lack a (#NNN) subject)")
+                               "floor (for workflows whose squash commits lack a (#NNN) subject) "
+                               "(default: .shipsignal.toml's [impact].squash, else off)")
     impact_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
     impact_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
@@ -284,9 +310,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     report_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
-    report_p.add_argument("--squash", action="store_true",
+    report_p.add_argument("--squash", action="store_true", default=None,
                           help="treat the history as squash-merged — flag AI adoption as a "
-                               "floor (for workflows whose squash commits lack a (#NNN) subject)")
+                               "floor (for workflows whose squash commits lack a (#NNN) subject) "
+                               "(default: .shipsignal.toml's [impact].squash, else off)")
     report_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "

@@ -16,6 +16,7 @@ trailers). The lens is fully deterministic at a given commit SHA.
 """
 from __future__ import annotations
 
+import contextlib
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -111,6 +112,39 @@ def _alias_key(kw: str) -> str:
 
 
 _AI_ALIAS_KEYS: dict[str, str] = {_alias_key(kw): label for kw, label in AI_TOOL_ALIASES.items()}
+
+
+@contextlib.contextmanager
+def extra_aliases(extra: dict[str, str] | None):
+    """Temporarily merge extra AI-tool aliases (Package G's
+    `.shipsignal.toml` `[impact].extra_ai_aliases`, e.g. an internal bot name)
+    into the matching registry for the duration of the ``with`` block, then
+    restore exactly what was there before — including the case where ``extra``
+    overrides a built-in key, which must come back on exit, not vanish.
+
+    Mutates module-level state, so it is NOT safe across concurrent scans in
+    the same process. Fine for the single-shot CLI this exists for; callers
+    embedding ShipSignal as a library in a concurrent context should not rely
+    on it.
+    """
+    if not extra:
+        yield
+        return
+    prior: dict[str, str | None] = {}
+    for kw, label in extra.items():
+        if not (isinstance(kw, str) and isinstance(label, str)):
+            continue
+        key = _alias_key(kw)
+        prior[key] = _AI_ALIAS_KEYS.get(key)
+        _AI_ALIAS_KEYS[key] = label
+    try:
+        yield
+    finally:
+        for key, old in prior.items():
+            if old is None:
+                _AI_ALIAS_KEYS.pop(key, None)
+            else:
+                _AI_ALIAS_KEYS[key] = old
 
 
 def _bot_kind(email: str) -> tuple[str, str | None] | None:

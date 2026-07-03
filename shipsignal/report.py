@@ -1220,8 +1220,8 @@ def render_unified_html(impact_result: dict, readiness_result: dict) -> str:
     return impact_html + readiness_section
 
 
-def render_badge(result: dict) -> str:
-    label, value = "AI readiness", f"{result['score']}/100"
+def render_badge(result: dict, label: str | None = None) -> str:
+    label, value = (label or "AI readiness"), f"{result['score']}/100"
     color = GRADE_COLOR.get(result["grade"], "#9f9f9f")
     lw, rw = int(len(label) * 6.5) + 12, int(len(value) * 6.5) + 12
     w = lw + rw
@@ -1238,18 +1238,21 @@ role="img" aria-label="{label}: {value}">
 </g></svg>"""
 
 
-def render_badge_json(result: dict) -> str:
+def render_badge_json(result: dict, label: str | None = None) -> str:
     """A shields.io endpoint-badge payload (https://shields.io/badges/endpoint-badge).
 
     Unlike ``render_badge``'s static SVG — which has to be committed and goes
     stale the moment the score changes — this JSON is meant to be republished
     somewhere shields.io can fetch it (a gist, GitHub Pages, ...), so a badge
     pasted into a README stays live without a new commit on every scan.
+
+    ``label`` overrides the shields.io left-hand text (Package G's
+    `.shipsignal.toml` `[report].badge_label`); defaults to "readiness".
     """
     color = GRADE_COLOR.get(result["grade"], "#9f9f9f")
     payload = {
         "schemaVersion": 1,
-        "label": "readiness",
+        "label": label or "readiness",
         "message": f"{result['score']}/100",
         "color": color.lstrip("#"),
     }

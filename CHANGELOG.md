@@ -9,6 +9,18 @@ are git-tagged).
 
 ## [Unreleased]
 
+### Added
+- **`.shipsignal.toml` config file** (Package G). Repo-local defaults, picked up automatically
+  by every command (including in CI): `extra_ai_aliases` and `squash` under `[impact]`;
+  `fail_under` and `exclude_modules` under `[readiness]`; `badge_label` under `[report]`.
+  Precedence is CLI flag > config file > built-in default. Validation never crashes a scan — an
+  unknown key or wrong-typed value degrades to a warning (printed to stderr) plus the built-in
+  default; a malformed file is skipped entirely. `extra_ai_aliases` keys must be a single alnum
+  word (matching is exact-token, like the built-in registry) — a hyphenated key is rejected with
+  a warning rather than silently matching nothing. The Action (`action.yml`) always passes
+  `--fail-under 0` internally so a scanned repo's own `fail_under` can never hijack the job's
+  pass/fail decision, which stays controlled solely by the `fail-under` input.
+
 ## [0.8.0] — 2026-07-02
 
 ### Added

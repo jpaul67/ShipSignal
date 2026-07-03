@@ -31,7 +31,12 @@ A ready-to-copy version lives at [examples/workflows/shipsignal.yml](../examples
 5. If `fail-under` is set and the score is below it, fails the job (non-zero exit).
 
 The gate is enforced by the Action itself (not the CLI's `--fail-under`), so the summary and outputs
-are always produced — even on a failing score.
+are always produced — even on a failing score. If the scanned repo has its own `.shipsignal.toml`
+(see [Configuration](../README.md#configuration)), it's picked up automatically — extra AI aliases,
+module excludes, and a custom badge label all apply in CI exactly as they would locally. The one
+exception is `[readiness].fail_under`: the Action always overrides it (passing `--fail-under 0`
+internally) so the job's pass/fail decision stays controlled solely by the `fail-under` **input**,
+not by a value baked into the repo being scanned.
 
 ## Inputs
 

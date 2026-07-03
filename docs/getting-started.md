@@ -100,6 +100,25 @@ A 0-100 static-state score across six categories:
 
 Fixes are ranked by payoff (`+N pts`) with an effort tag and `file:line` location. Categories that don't apply are excluded and the score renormalizes, so a small library isn't punished.
 
+## Configuration
+
+Drop a `.shipsignal.toml` in the repo root for team-wide defaults, picked up automatically by every command (local or CI):
+
+```toml
+[impact]
+extra_ai_aliases = { "acmebot" = "Acme internal" }
+squash = true
+
+[readiness]
+fail_under = 80
+exclude_modules = ["vendor/legacy"]
+
+[report]
+badge_label = "readiness"
+```
+
+Precedence is CLI flag > config file > built-in default, so `--fail-under` on the command line always wins. A typo never breaks a scan — an unknown key or wrong-typed value prints a warning and falls back to the default.
+
 ## CI gate
 
 Add a readiness floor to your pipeline:

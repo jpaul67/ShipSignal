@@ -86,10 +86,13 @@ runs:
           extra=($INPUT_ARGS)
         fi
 
-        # Run without --fail-under so the CLI never exits early; we gate below
-        # ourselves so the summary + outputs are produced even on a failing score.
+        # --fail-under 0 (never fails; scores are always >= 0) overrides any
+        # fail_under the target repo's own .shipsignal.toml declares — Package G
+        # made the CLI honor that config key, but this step still needs to gate
+        # itself below so the summary + outputs are produced even on a failing
+        # score, and set -euo pipefail would otherwise abort the step early.
         python -m shipsignal.cli scan "$INPUT_PATH" \
-          --json "$json" --md "$md" ${extra[@]+"${extra[@]}"}
+          --json "$json" --md "$md" --fail-under 0 ${extra[@]+"${extra[@]}"}
 
         # Parse the score and decide pass/fail in Python (handles int or float).
         result="$(python - "$json" "$INPUT_FAIL_UNDER" <<'PY'

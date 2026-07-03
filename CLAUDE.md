@@ -18,6 +18,7 @@ Pure Python stdlib, no runtime dependencies. Both lenses share architecture and 
 - Readiness only: `python -m shipsignal.cli scan <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE` · `--badge FILE` · `--badge-json FILE` (live shields.io endpoint badge — see README); CI gate: `--fail-under N`
 - CLI text output is colored on a real terminal (`--no-color` / `NO_COLOR` / `FORCE_COLOR` control it — [shipsignal/ansi.py](shipsignal/ansi.py)); default (piped/non-TTY) output is unstyled.
 - Impact only: `python -m shipsignal.cli impact <path | url | owner/repo>` — `--json FILE` · `--md FILE` · `--html FILE`; `--adoption-date YYYY-MM-DD`; `--no-readiness` to skip the embedded readiness number; `--timeline` to show the over-time trajectory.
+- A `.shipsignal.toml` at the scan target's root is picked up automatically by every subcommand (including in CI) — see the config gotcha below for the schema and precedence rule.
 - Tests: `python -m unittest discover -s tests -v` (or `make test`)
 - Dogfood (the repo passes its own scan): `python -m shipsignal.cli scan . --fail-under 90` (or `make scan`)
 
@@ -48,6 +49,7 @@ Pipelines:
 - **Clones are full-history, never `--depth`** (freshness, adoption detection, and the before/after delta need the whole graph). Readiness clones **treeless** (`--filter=blob:none`); Impact/`report` clone **with blobs** (`treeless=False`) because `git log --numstat` triggers a per-commit blob fetch on a treeless clone and crawls on big repos.
 - **Tests are stdlib `unittest`** in `tests/`. Run them before committing.
 - **Commit identity.** Author commits as `jpaul67 <5659943+jpaul67@users.noreply.github.com>`, the project's canonical GitHub identity. The repo's local git config is already set to this — don't override it with a global or per-machine identity.
+- **Repo-local config** ([config.py](shipsignal/config.py)): `.shipsignal.toml` at the scan target's root can override `extra_ai_aliases`, `squash` (`[impact]`), `fail_under`, `exclude_modules` (`[readiness]`), and `badge_label` (`[report]`). Precedence is **CLI flag > config file > built-in default** — enforce that order in `cli.py`, not in `config.py` itself. `load_config()` never raises: unknown keys and wrong-typed values become warnings (printed to stderr, default kept), a malformed file is skipped entirely. The schema is additive — future keys should warn-on-unknown too, not error, so old configs keep working. Alias-registry keys (built-in or config-supplied) must still be a single alnum token — matching is exact-token (see the AI-tool-registry gotcha above), so a hyphenated `extra_ai_aliases` key can never match anything and is rejected with a warning.
 
 ## Where to read next
 

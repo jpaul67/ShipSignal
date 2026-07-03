@@ -217,7 +217,12 @@ def _find_readme(dir_path: str, by_dir: dict[str, list[str]]) -> str | None:
     return None
 
 
-def detect_modules(root: Path, files: list[str], is_git: bool):
+def _under_excluded_prefix(path: str, exclude_prefixes: frozenset[str]) -> bool:
+    return any(path == p or path.startswith(p + "/") for p in exclude_prefixes)
+
+
+def detect_modules(root: Path, files: list[str], is_git: bool,
+                   exclude_prefixes: frozenset[str] = frozenset()):
     by_dir: dict[str, list[str]] = {}
     for f in files:
         by_dir.setdefault(dir_of(f), []).append(f)
@@ -237,8 +242,14 @@ def detect_modules(root: Path, files: list[str], is_git: bool):
     agent_files = [f for f in files if is_agent_file(f)]
     for m in modules:
         # Waive example/test/fixture modules anywhere in their path (a workspace
-        # member like examples/lit shouldn't be required to carry a README).
-        if m.path != "." and any(seg in WAIVED_DIRS for seg in m.path.split("/")):
+        # member like examples/lit shouldn't be required to carry a README), and
+        # any module a repo-local .shipsignal.toml explicitly excludes (Package G's
+        # [readiness].exclude_modules — e.g. a vendored/legacy dir the team knows
+        # about and doesn't want nagged for a README).
+        if m.path != "." and (
+            any(seg in WAIVED_DIRS for seg in m.path.split("/"))
+            or _under_excluded_prefix(m.path, exclude_prefixes)
+        ):
             m.waived = True
         m.readme_path = _find_readme(m.path, by_dir)
         m.has_readme = m.readme_path is not None

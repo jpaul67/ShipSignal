@@ -83,6 +83,25 @@ shipsignal trend . --limit 8 --since 2026-01-01
 
 The trend view reads only existing snapshots — no re-scan, fully offline. Honest about single-snapshot ("scan again to start a trend"), schema-version mismatches (skips the fixes diff rather than inventing false resolutions), and large window jumps (warns when one snapshot covers >30% more commits than its predecessor).
 
+## Configuration
+
+Drop a `.shipsignal.toml` in the repo root for team-wide defaults — picked up automatically by every command, including in CI:
+
+```toml
+[impact]
+extra_ai_aliases = { "acmebot" = "Acme internal" }  # merged into the AI-tool registry
+squash = true                                       # declare a squash-merge workflow
+
+[readiness]
+fail_under = 80
+exclude_modules = ["vendor/legacy"]                 # waive from the module-README requirement
+
+[report]
+badge_label = "readiness"
+```
+
+Precedence is **CLI flag > config file > built-in default** — e.g. `--fail-under` on the command line always wins over `fail_under` in the config. All keys are optional; an unknown key or a wrong-typed value degrades to a printed warning and the built-in default, never a crash. `extra_ai_aliases` keys must be a single word (matching is exact-token, same as the built-in registry) — a hyphenated or multi-word key can't match anything and is rejected with a warning.
+
 ## Use it in CI (GitHub Action)
 
 Gate the readiness score on every push and PR, and get the report in the run summary:
