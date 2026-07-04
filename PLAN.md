@@ -31,7 +31,23 @@ signals: revert pairs → time-to-correction), **K** (release cadence & lead tim
 with no external users yet, the impact-lens differentiators ARE the user acquisition, so they
 move ahead of the team-workflow features; I and F slide to a demand-triggered Train 6. One
 hard dependency: L lands after D (squash recovery fixes the attribution L's comparison
-depends on). **Not started: Trains 3–6.** Pick up Train 3 next.
+depends on).
+
+**Status (2026-07-03): Train 3 (Packages G, J, K) and v0.9.0 SHIPPED.** Package G
+(`.shipsignal.toml` config file) landed first — repo-local defaults for extra AI aliases,
+squash, `release_tag_pattern`, readiness `fail_under`/`exclude_modules`, and `badge_label`;
+CLI flag > config file > built-in default, never crashes on a typo. Package J (Outcomes:
+revert pairs & time-to-correction) and Package K (release cadence & lead time from tags) both
+landed as **context-only blocks — never folded into Delivery Health.** Together with the
+existing change-failure proxy, that's deploy frequency, lead time, and change-failure rate from
+git history alone, zero integrations (time-to-restore stays out of scope on purpose — production
+incidents aren't in git). Calibrated against crown/chalk/vitest before merge.
+
+**v0.9.0**: tagged, pushed, PyPI publish verified live — a fresh-venv install from PyPI plus a
+real scan confirmed both new blocks render correctly.
+
+**Not started: Trains 4–6** (Packages D, L, I, F — see the table below). Pick up Train 4
+(Package D) next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 
