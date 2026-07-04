@@ -34,6 +34,7 @@ class TestLoadConfig(unittest.TestCase):
             self.assertEqual(warnings, [])
             self.assertEqual(cfg.impact.extra_ai_aliases, {})
             self.assertIsNone(cfg.impact.squash)
+            self.assertIsNone(cfg.impact.release_tag_pattern)
             self.assertIsNone(cfg.readiness.fail_under)
             self.assertEqual(cfg.readiness.exclude_modules, [])
             self.assertIsNone(cfg.report.badge_label)
@@ -44,6 +45,7 @@ class TestLoadConfig(unittest.TestCase):
                 '[impact]\n'
                 'extra_ai_aliases = { "acmebot" = "Acme internal" }\n'
                 'squash = true\n'
+                r'release_tag_pattern = "^pkg@\\d+\\.\\d+\\.\\d+$"' "\n"
                 '[readiness]\n'
                 'fail_under = 80\n'
                 'exclude_modules = ["vendor/legacy"]\n'
@@ -55,6 +57,7 @@ class TestLoadConfig(unittest.TestCase):
             self.assertEqual(warnings, [])
             self.assertEqual(cfg.impact.extra_ai_aliases, {"acmebot": "Acme internal"})
             self.assertTrue(cfg.impact.squash)
+            self.assertEqual(cfg.impact.release_tag_pattern, r"^pkg@\d+\.\d+\.\d+$")
             self.assertEqual(cfg.readiness.fail_under, 80)
             self.assertEqual(cfg.readiness.exclude_modules, ["vendor/legacy"])
             self.assertEqual(cfg.report.badge_label, "custom")
@@ -125,6 +128,24 @@ class TestLoadConfig(unittest.TestCase):
             cfg, warnings = config.load_config(Path(td))
             self.assertEqual(cfg.impact.extra_ai_aliases, {})
             self.assertTrue(any("impact.extra_ai_aliases" in w for w in warnings), warnings)
+
+    def test_release_tag_pattern_invalid_regex_warns_and_falls_back(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / config.CONFIG_FILENAME).write_text(
+                '[impact]\nrelease_tag_pattern = "["\n', encoding="utf-8",
+            )
+            cfg, warnings = config.load_config(Path(td))
+            self.assertIsNone(cfg.impact.release_tag_pattern)
+            self.assertTrue(any("impact.release_tag_pattern" in w for w in warnings), warnings)
+
+    def test_release_tag_pattern_wrong_type_warns(self):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / config.CONFIG_FILENAME).write_text(
+                "[impact]\nrelease_tag_pattern = 42\n", encoding="utf-8",
+            )
+            cfg, warnings = config.load_config(Path(td))
+            self.assertIsNone(cfg.impact.release_tag_pattern)
+            self.assertTrue(any("impact.release_tag_pattern" in w for w in warnings), warnings)
 
 
 class TestExtraAliasesContextManager(unittest.TestCase):

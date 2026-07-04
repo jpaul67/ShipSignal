@@ -10,6 +10,16 @@ are git-tagged).
 ## [Unreleased]
 
 ### Added
+- **Release cadence & lead time from tags** (Package K). A new block reports tags-per-month +
+  median gap between tags (trailing 12 months, falling back to the full tag history when sparse —
+  the window used is disclosed), and median lead time (days from a commit landing to the release
+  tag that shipped it, over every consecutive tag pair — one `git log` call per pair, never per
+  commit). Tags are filtered to release-shaped ones (default `v?N.N[.N]`, overridable via
+  `.shipsignal.toml`'s `[impact].release_tag_pattern` for monorepo tags like `pkg@1.2.3`). Reports
+  `n/a` below 3 matched tags — tags aren't deploys, so an untagged repo is never penalized.
+  Context only, same as Package J's Outcomes block — never folded into Delivery Health. With both
+  landed, that's deploy frequency, lead time, and the change-failure proxy from git history alone,
+  zero integrations (time-to-restore stays `✗` — production incidents aren't in git).
 - **Outcomes: revert pairs & time-to-correction** (Package J). A new Outcomes block in the impact
   text/Markdown/HTML output reports revert-pair count + median time-to-correction, matched by sha
   against the analyzed history — git's own `git revert` body format (`Revert "..."` + `This

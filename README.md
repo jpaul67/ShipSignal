@@ -47,6 +47,8 @@ A fourth, *conditional* **Before/after AI Enablement** delta appears only when t
 
 An **Outcomes** block rides along as pure context, never scored: revert-pair count + median time-to-correction, computed from git's own `git revert` format (subject `Revert "..."` + body `This reverts commit <sha>`) plus explicit `Fixes:`/`Reverts:` trailers, matched by sha against the analyzed history — a revert-of-a-revert is just another pair, and unmatched reverts (target outside the window) are disclosed, not hidden. Reports `n/a` below 3 matched pairs. It's commit-scoped, not MTTR — production incidents aren't in git. Alongside it, the change-failure proxy (the fix/revert subject rate) is relabeled honestly: it measures commit-labeling discipline as much as failure rate, so it's forbidden from ever feeding Delivery Health.
 
+A **Release cadence & lead time** block reads the same honesty rules from version tags: tags-per-month + median inter-tag gap (trailing 12 months, falling back to the full tag history when sparse), and lead time (median days from a commit landing to the release tag that shipped it) over every consecutive tag pair — one `git log` call per pair, never per commit. Tags are filtered to release-shaped ones (default `v?N.N[.N]`, overridable per repo via `.shipsignal.toml`'s `release_tag_pattern` for monorepo tags like `pkg@1.2.3`). Reports `n/a` below 3 matched tags — **tags aren't deploys** (a service can deploy without tagging), so an untagged repo is never penalized. With Outcomes and Release cadence both landed, that's the DORA-shaped picture from git history alone, zero integrations: deploy frequency ✓, lead time ✓, change-failure proxy ✓ (context) — time-to-restore ✗, because production incidents simply aren't in git, and saying so honestly beats guessing.
+
 Calibrated across crown (Pervasive · 55/F · 83/B — flags a real test gap), chalk (None · 77/C · 80/B — flags maintainer concentration), vitest (Emerging · 97/A · 97/A — clean). Every delivery number carries an attribution caveat: it measures general delivery health, never *proves* AI caused a change.
 
 ## Readiness lens — is the repo set up for agents?
@@ -93,6 +95,7 @@ Drop a `.shipsignal.toml` in the repo root for team-wide defaults — picked up 
 [impact]
 extra_ai_aliases = { "acmebot" = "Acme internal" }  # merged into the AI-tool registry
 squash = true                                       # declare a squash-merge workflow
+release_tag_pattern = "^pkg@\\d+\\.\\d+\\.\\d+$"      # override the default v?N.N[.N] tag filter
 
 [readiness]
 fail_under = 80

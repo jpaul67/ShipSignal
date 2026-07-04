@@ -74,6 +74,22 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "honest `fix:` conventions must never score worse than one with "
                "vague messages, so this never feeds Delivery Health.",
     },
+    "release_cadence": {
+        "short": "How often the repo tags releases, and how long a commit "
+                 "waits between landing and its release tag — deploy-frequency "
+                 "and lead-time proxies from data already in the clone. Always "
+                 "context, never part of any score.",
+        "tip": "Tags filtered to release-shaped ones (default `v?N.N[.N]`, "
+               "overridable via `.shipsignal.toml`'s `release_tag_pattern` for "
+               "monorepo tags like `pkg@1.2.3`). Cadence = tags/month + median "
+               "gap between tags, over the trailing 12 months (falls back to "
+               "the full tag history when sparse — the window used is "
+               "disclosed). Lead time = median(release-tag date − commit date) "
+               "over every commit in each consecutive tag pair. n/a below 3 "
+               "matched tags. Tags are NOT deploys — a service can deploy "
+               "without tagging, so an untagged repo is never penalized, only "
+               "shown n/a.",
+    },
     # --- conditional / over-time ---
     "before_after": {
         "short": "When a clean pre-AI baseline exists, how delivery metrics shifted "
@@ -170,6 +186,7 @@ HOWTO_ORDER = [
     ("AI Adoption", "ai_adoption"),
     ("Delivery Health", "delivery_health"),
     ("Outcomes", "outcomes"),
+    ("Release cadence", "release_cadence"),
     ("Readiness", "readiness"),
     ("Before/after AI Enablement", "before_after"),
     ("Trajectory", "trajectory"),

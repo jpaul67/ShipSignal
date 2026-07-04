@@ -146,6 +146,7 @@ def _cmd_impact(args: argparse.Namespace) -> int:
                 adoption_date_override=args.adoption_date,
                 readiness_score=readiness_score,
                 squash_override=squash_override,
+                release_tag_pattern=cfg.impact.release_tag_pattern,
             )
         print(report.render_impact(result, color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
@@ -209,6 +210,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
                 adoption_date_override=args.adoption_date,
                 readiness_score=readiness_result.get("score"),
                 squash_override=squash_override,
+                release_tag_pattern=cfg.impact.release_tag_pattern,
             )
         print(report.render_unified(impact_result, readiness_result,
                                     color=ansi.resolve_enabled(args.no_color)))

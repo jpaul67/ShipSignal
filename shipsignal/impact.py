@@ -529,6 +529,89 @@ def compute_outcomes(commits: list[Commit], quality: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Package K — Release cadence & lead time from tags. Context only, never
+# scored — same rule as Package J's outcomes. Tags are NOT deploys (a service
+# can deploy without tagging), so an untagged repo is never penalized, only
+# marked n/a.
+# ---------------------------------------------------------------------------
+MIN_RELEASE_TAGS = 3
+RELEASE_CADENCE_TRAILING_DAYS = 365
+DEFAULT_RELEASE_TAG_RE = re.compile(r"^v?\d+\.\d+(?:\.\d+)?$")
+
+
+def compute_release_cadence(root: Path, tag_pattern: re.Pattern | None = None) -> dict:
+    """Deploy-frequency + lead-time proxies computed from version tags.
+
+    Tags are filtered to release-shaped ones (default semver-ish ``v?N.N[.N]``,
+    overridable via ``.shipsignal.toml``'s ``[impact].release_tag_pattern`` for
+    monorepo per-package tags like ``pkg@1.2.3``). Below MIN_RELEASE_TAGS
+    matched tags this returns "n/a" rather than a noisy number from 1-2 points.
+
+    Cadence uses the trailing 12 months (falling back to the full tag history
+    when that window is too sparse — disclosed via ``window``). Lead time is
+    computed over every consecutive tag pair regardless of window: for each
+    pair (T1, T2], commits from ``git log T1..T2`` get release date = date(T2);
+    lead time = date(T2) − commit date. One git-log call per tag pair (linear
+    in tag count, never per-commit).
+    """
+    pattern = tag_pattern or DEFAULT_RELEASE_TAG_RE
+    raw_tags = gitinfo.list_tags(root)
+    tags = sorted((t for t in raw_tags if pattern.match(t[0])), key=lambda t: t[1])
+
+    if len(tags) < MIN_RELEASE_TAGS:
+        return {
+            "status": "n/a",
+            "reason": f"only {len(tags)} release-shaped tag(s) found "
+                      f"(need {MIN_RELEASE_TAGS})",
+            "tags_matched": len(tags),
+            "tags_total": len(raw_tags),
+        }
+
+    cutoff = tags[-1][1] - RELEASE_CADENCE_TRAILING_DAYS * 86400
+    trailing = [t for t in tags if t[1] >= cutoff]
+    window_tags, window = (
+        (trailing, "trailing 12 months") if len(trailing) >= MIN_RELEASE_TAGS
+        else (tags, "full history")
+    )
+
+    span_days = max(1, (window_tags[-1][1] - window_tags[0][1]) / 86400)
+    gaps = [(b[1] - a[1]) / 86400 for a, b in zip(window_tags, window_tags[1:], strict=False)]
+
+    lead_times: list[float] = []
+    for (t1, _), (t2, ts2) in zip(tags, tags[1:], strict=False):
+        lead_times.extend(
+            (ts2 - ct) / 86400 for ct in gitinfo.commits_between_tags(root, t1, t2)
+        )
+
+    if lead_times:
+        lead_time = {
+            "status": "scored",
+            "median_days": round(_percentile(lead_times, 50), 1),
+            "commits": len(lead_times),
+        }
+    else:
+        lead_time = {
+            "status": "n/a",
+            "reason": "no commits found between the analyzed tag pairs",
+            "median_days": None,
+            "commits": 0,
+        }
+
+    return {
+        "status": "scored",
+        "tags_matched": len(tags),
+        "tags_total": len(raw_tags),
+        "window": window,
+        "cadence": {
+            "tags_per_month": round(len(window_tags) / (span_days / 30), 2),
+            "median_gap_days": round(_percentile(gaps, 50), 1),
+        },
+        "lead_time": lead_time,
+        "latest_tag": tags[-1][0],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Feature C — Team-level AI-adoption BREADTH (aggregate only, never per-person).
 #
 # Hard non-goal: ShipSignal does NOT score, rank, or list individual developers.
@@ -919,6 +1002,7 @@ def compute_impact(
     adoption_date_override: str | None = None,
     readiness_score: int | None = None,
     squash_override: bool = False,
+    release_tag_pattern: str | None = None,
 ) -> dict:
     result: dict = {
         "schema_version": SCHEMA_VERSION,
@@ -1022,6 +1106,12 @@ def compute_impact(
     # --- Outcomes (Package J): revert pairs / time-to-correction + the
     # relabeled change-failure proxy — displayed context, never scored.
     result["outcomes"] = compute_outcomes(commits, result["metrics"]["quality"])
+
+    # --- Release cadence & lead time (Package K): tag-based proxies —
+    # displayed context, never scored. Independent of the commit sample above
+    # (tags can predate/postdate the analyzed window's floor).
+    tag_re = re.compile(release_tag_pattern) if release_tag_pattern else None
+    result["release_cadence"] = compute_release_cadence(root, tag_pattern=tag_re)
 
     # --- The three always-on headline numbers ---
     # 1) AI adoption level (above), 2) delivery-health snapshot, 3) readiness.

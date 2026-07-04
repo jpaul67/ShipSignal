@@ -5,6 +5,7 @@ Schema (all optional):
     [impact]
     extra_ai_aliases = { "acmebot" = "Acme internal" }  # merged into AI_TOOL_ALIASES at runtime
     squash = true
+    release_tag_pattern = "^pkg@\\\\d+\\\\.\\\\d+\\\\.\\\\d+$"  # override default v?N.N[.N]
     [readiness]
     fail_under = 80
     exclude_modules = ["vendor/legacy"]
@@ -19,8 +20,8 @@ typo in `.shipsignal.toml` must never crash a scan. Callers should print the
 returned warnings to stderr.
 
 The schema is additive: unknown keys warn rather than error so later packages
-(K's `release_tag_pattern`, L's `survival` block, both under `[impact]`) can
-add keys without breaking configs written against an older ShipSignal.
+(L's `survival` block, under `[impact]`) can add keys without breaking configs
+written against an older ShipSignal.
 """
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ CONFIG_FILENAME = ".shipsignal.toml"
 class ImpactConfig:
     extra_ai_aliases: dict[str, str] = field(default_factory=dict)
     squash: bool | None = None
+    release_tag_pattern: str | None = None
 
 
 @dataclass
@@ -86,6 +88,20 @@ def _valid_alias_key(kw: str) -> bool:
     return bool(_SINGLE_TOKEN_RE.match(kw.rstrip("-").lower()))
 
 
+# Package K's release_tag_pattern is a user-supplied regex (for monorepo
+# per-package tags like "pkg@1.2.3"). A malformed pattern must degrade like
+# any other bad config value, not raise mid-scan — validated here, once,
+# rather than at every impact.py call site.
+def _is_valid_regex(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        re.compile(value)
+    except re.error:
+        return False
+    return True
+
+
 # section -> {key: (type-check, type-name-for-message, setter)}
 _SCHEMA: dict[str, dict[str, tuple]] = {
     "impact": {
@@ -93,6 +109,8 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
                              lambda cfg, v: setattr(cfg.impact, "extra_ai_aliases", dict(v))),
         "squash": (lambda v: isinstance(v, bool), "a bool",
                   lambda cfg, v: setattr(cfg.impact, "squash", v)),
+        "release_tag_pattern": (_is_valid_regex, "a valid regex string",
+                                lambda cfg, v: setattr(cfg.impact, "release_tag_pattern", v)),
     },
     "readiness": {
         "fail_under": (_is_int, "an int",

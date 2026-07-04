@@ -612,6 +612,28 @@ def render_impact(result: dict, *, color: bool = False) -> str:
                  f"({oc['change_failure_commits']} commits)")
         L.append("")
 
+    # --- Release cadence & lead time (Package K): tag-based proxies —
+    # context, never scored. Tags aren't deploys; an untagged repo shows n/a,
+    # never a penalty. ---
+    rc = result.get("release_cadence")
+    if rc:
+        L.append("  Release cadence & lead time — context, not scored:")
+        L.append(f"   {glossary.short('release_cadence')}")
+        if rc["status"] == "scored":
+            cad = rc["cadence"]
+            L.append(f"   {cad['tags_per_month']:g} tags/mo  ·  median gap "
+                     f"{cad['median_gap_days']:g}d  ({rc['window']}, "
+                     f"{rc['tags_matched']} tags)")
+            lt = rc["lead_time"]
+            if lt["status"] == "scored":
+                L.append(f"   lead time: median {lt['median_days']:g}d "
+                         f"({lt['commits']} commits)")
+            else:
+                L.append(f"   lead time: n/a — {lt['reason']}")
+        else:
+            L.append(f"   n/a — {rc['reason']}")
+        L.append("")
+
     # --- Before/after AI Enablement delta (the conditional bonus) ---
     if result.get("score_status") == "scored":
         L.append(f"  Before/after AI Enablement: {result['score']}/100")
@@ -786,6 +808,26 @@ def render_impact_markdown(result: dict) -> str:
         L.append(f"- **Change-failure proxy:** {oc['change_failure_rate']:.0%} "
                  f"({oc['change_failure_commits']} commits)")
         L += ["", f"_<sub>{glossary.short('outcomes')}</sub>_", ""]
+
+    # Release cadence & lead time (Package K): tag-based proxies — context,
+    # never scored.
+    rc = result.get("release_cadence")
+    if rc:
+        L += ["## Release cadence & lead time (context — never scored)", ""]
+        if rc["status"] == "scored":
+            cad = rc["cadence"]
+            L.append(f"- **Cadence:** {cad['tags_per_month']:g} tags/mo · "
+                     f"median gap **{cad['median_gap_days']:g}d** "
+                     f"({rc['window']}, {rc['tags_matched']} tags)")
+            lt = rc["lead_time"]
+            if lt["status"] == "scored":
+                L.append(f"- **Lead time:** median **{lt['median_days']:g}d** "
+                         f"({lt['commits']} commits)")
+            else:
+                L.append(f"- *Lead time: n/a — {lt['reason']}.*")
+        else:
+            L.append(f"- *n/a — {rc['reason']}.*")
+        L += ["", f"_<sub>{glossary.short('release_cadence')}</sub>_", ""]
 
     # Over-time trajectory (always included when there's enough history).
     traj = result.get("trajectory") or {}
@@ -1037,6 +1079,34 @@ def render_impact_html(result: dict) -> str:
     else:
         outcomes_block = ""
 
+    # --- Release cadence & lead time (Package K): tag-based proxies —
+    # context, never scored. ---
+    rc = result.get("release_cadence")
+    if rc and rc["status"] == "scored":
+        cad = rc["cadence"]
+        cadence_line = (f"Cadence: <b>{cad['tags_per_month']:g}</b> tags/mo · median gap "
+                        f"<b>{cad['median_gap_days']:g}d</b> "
+                        f"<span class='hint'>({rc['window']}, {rc['tags_matched']} tags)</span>")
+        lt = rc["lead_time"]
+        if lt["status"] == "scored":
+            lead_line = (f"<p>Lead time: median <b>{lt['median_days']:g}d</b> "
+                        f"<span class='hint'>({lt['commits']} commits)</span></p>")
+        else:
+            lead_line = f"<p class='hint'>Lead time: n/a — {_esc(lt['reason'])}.</p>"
+        release_cadence_block = (
+            f"<h2>{_tip('Release cadence', 'release_cadence')} "
+            f"<span class='hint'>context, never scored</span></h2>"
+            f"<p>{cadence_line}</p>{lead_line}"
+        )
+    elif rc:
+        release_cadence_block = (
+            f"<h2>{_tip('Release cadence', 'release_cadence')} "
+            f"<span class='hint'>context, never scored</span></h2>"
+            f"<div class='withheld'>n/a — {_esc(rc['reason'])}.</div>"
+        )
+    else:
+        release_cadence_block = ""
+
     # --- before/after bonus ---
     if result.get("score_status") == "scored":
         prows = "".join(
@@ -1131,6 +1201,8 @@ def render_impact_html(result: dict) -> str:
 {health_block}
 
 {outcomes_block}
+
+{release_cadence_block}
 
 {bonus_block}
 

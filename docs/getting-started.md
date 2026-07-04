@@ -92,6 +92,15 @@ Alongside Delivery Health, an **Outcomes** block reports two more numbers — al
 - **Revert pairs + median time-to-correction** — a commit whose body matches git's own `git revert` format (subject `Revert "..."` + body `This reverts commit <sha>`), or carries an explicit `Fixes:`/`Reverts:` trailer, is matched by sha against the analyzed history. A revert-of-a-revert is just another pair. Reverts whose target isn't in the analyzed window are disclosed as unmatched, never hidden. Reports `n/a` below 3 matched pairs. **Not MTTR** — this is commit-scoped; production incidents aren't in git.
 - **Change-failure proxy** — the fix/revert subject rate, relabeled honestly: it measures commit-labeling discipline as much as failure rate, so a repo with honest `fix:` conventions must never score worse than one with vague commit messages. Context only — it's forbidden from ever feeding Delivery Health.
 
+### Release cadence & lead time (context, never scored)
+
+Two more numbers from version tags, always displayed, never scored:
+
+- **Release cadence** — tags-per-month + median gap between tags, over the trailing 12 months (falling back to the full tag history when that window is sparse — the window used is disclosed). Tags are filtered to release-shaped ones: default `v?N.N[.N]`, overridable per repo via `.shipsignal.toml`'s `release_tag_pattern` (for monorepo tags like `pkg@1.2.3`).
+- **Lead time** — median days from a commit landing to the release tag that shipped it, over every consecutive tag pair (one `git log` call per pair, never per commit).
+
+Reports `n/a` below 3 matched release-shaped tags. **Tags aren't deploys** — a service can deploy without tagging — so an untagged repo is never penalized, only shown `n/a`. Together with Outcomes above, this is the DORA-shaped story from git history alone: deploy frequency ✓, lead time ✓, change-failure proxy ✓ (context), time-to-restore ✗ (incidents aren't in git).
+
 ### Readiness
 
 A 0-100 static-state score across six categories:
@@ -115,6 +124,7 @@ Drop a `.shipsignal.toml` in the repo root for team-wide defaults, picked up aut
 [impact]
 extra_ai_aliases = { "acmebot" = "Acme internal" }
 squash = true
+release_tag_pattern = "^pkg@\\d+\\.\\d+\\.\\d+$"
 
 [readiness]
 fail_under = 80

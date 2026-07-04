@@ -131,6 +131,52 @@ def commits_since(root: Path, date: str) -> int:
         return 0
 
 
+def list_tags(root: Path) -> list[tuple[str, int]]:
+    """[(tag_name, creatordate_unix)] for every tag, unfiltered. ``creatordate``
+    resolves to the tag's own date for an annotated tag and the pointed-at
+    commit's date for a lightweight tag — either way, the date the release
+    actually happened. Empty list on a repo with no tags."""
+    # Unlike `git log --format`, `for-each-ref --format` only interpolates
+    # `%(atom)` placeholders — it does NOT support the `%x1f` hex-escape
+    # syntax, so the separator byte is embedded literally here instead.
+    out = _run(
+        ["git", "for-each-ref", "refs/tags",
+         "--format=%(refname:short)\x1f%(creatordate:unix)"],
+        root,
+    )
+    if not out:
+        return []
+    tags: list[tuple[str, int]] = []
+    for ln in out.splitlines():
+        if not ln.strip():
+            continue
+        parts = ln.split("\x1f")
+        if len(parts) != 2:
+            continue
+        name, ts = parts
+        try:
+            tags.append((name, int(ts)))
+        except ValueError:
+            continue
+    return tags
+
+
+def commits_between_tags(root: Path, t1: str, t2: str) -> list[int]:
+    """Committer-date unix timestamps for non-merge commits in ``(t1, t2]``
+    (``git log t1..t2``) — one subprocess call per tag pair, not per commit."""
+    out = _run(["git", "log", f"{t1}..{t2}", "--no-merges", "--format=%ct"], root)
+    if not out:
+        return []
+    times: list[int] = []
+    for ln in out.splitlines():
+        if ln.strip():
+            try:
+                times.append(int(ln.strip()))
+            except ValueError:
+                pass
+    return times
+
+
 def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
     """Clone a repo for scanning. Always full history (never ``--depth``: freshness,
     adoption detection, and the before/after delta all need the whole commit graph).
