@@ -65,7 +65,7 @@ Combine them freely:
 shipsignal report ./my-repo --html audit.html --md audit.md --json audit.json
 ```
 
-## Reading the three numbers
+## Reading the numbers
 
 ### AI Adoption
 
@@ -84,6 +84,13 @@ A 0-100 score from three components:
 - **Knowledge distribution** (weight 30) — whether knowledge is spread across the team or concentrated in one person.
 
 Scored against general engineering norms. **Deliberately not credited to AI** — a delivery change may come from hiring, a finished migration, or a calmer quarter. The "Where to focus" section maps flagged components to specific observations with concrete numbers from the repo's own metrics.
+
+### Outcomes (context, never scored)
+
+Alongside Delivery Health, an **Outcomes** block reports two more numbers — always displayed, never folded into any score:
+
+- **Revert pairs + median time-to-correction** — a commit whose body matches git's own `git revert` format (subject `Revert "..."` + body `This reverts commit <sha>`), or carries an explicit `Fixes:`/`Reverts:` trailer, is matched by sha against the analyzed history. A revert-of-a-revert is just another pair. Reverts whose target isn't in the analyzed window are disclosed as unmatched, never hidden. Reports `n/a` below 3 matched pairs. **Not MTTR** — this is commit-scoped; production incidents aren't in git.
+- **Change-failure proxy** — the fix/revert subject rate, relabeled honestly: it measures commit-labeling discipline as much as failure rate, so a repo with honest `fix:` conventions must never score worse than one with vague commit messages. Context only — it's forbidden from ever feeding Delivery Health.
 
 ### Readiness
 

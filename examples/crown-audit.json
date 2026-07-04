@@ -4,29 +4,29 @@
   "impact": {
     "schema_version": "impact-0.2",
     "repo": "crown",
-    "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
-    "scanned_at": "2026-06-20T22:19:22Z",
+    "commit_sha": "742342a15ed16c285225bad8f2693d474c3b7257",
+    "scanned_at": "2026-07-04T00:51:42Z",
     "attribution_caveat": "Delivery pillars (flow, quality, risk) measure GENERAL delivery health \u2014 only AI-adoption and readiness are AI-specific. A delivery change may come from hiring, a finished migration, or a calmer quarter. The score asks whether the conditions under which AI pays off are improving \u2014 it does NOT prove AI caused any change.",
     "analysis": {
-      "commits_analyzed": 723,
+      "commits_analyzed": 724,
       "merges_excluded": 3,
       "maintenance_bots_excluded": 0,
       "ai_agent_commits": 0
     },
     "window": {
       "first_commit": "2026-02-05",
-      "last_commit": "2026-06-17",
-      "weeks": 19.0
+      "last_commit": "2026-06-22",
+      "weeks": 19.7
     },
     "adoption": {
       "ai_coauthor_share": 0.974,
       "level": "Pervasive",
-      "ai_commits": 704,
-      "total_commits": 723,
+      "ai_commits": 705,
+      "total_commits": 724,
       "adoption_date": "2026-02-02",
       "adoption_auto_detected": true,
       "per_tool": {
-        "Claude": 704
+        "Claude": 705
       },
       "weekly_series": [
         [
@@ -123,16 +123,33 @@
           "2026-06-15",
           1.0,
           1
+        ],
+        [
+          "2026-06-22",
+          1.0,
+          1
         ]
       ],
-      "note": "Lower bound \u2014 squash-merges drop trailers; gh PR data could recover them."
+      "breadth": {
+        "status": "n/a",
+        "reason": "only 1 active contributor(s) \u2014 breadth needs \u22653 to be meaningful and to avoid de-anonymization on small teams",
+        "active_contributors": 1,
+        "ai_contributors": null,
+        "breadth_pct": null,
+        "trend": null,
+        "note": "Team-level only \u2014 ShipSignal does not score individuals."
+      },
+      "note": "Lower bound \u2014 squash-merges drop trailers; gh PR data could recover them.",
+      "squash_suspected": false,
+      "squash_subject_frac": 0.0,
+      "squash_source": null
     },
     "metrics": {
       "flow": {
-        "commits": 723,
-        "span_days": 133,
-        "active_day_ratio": 0.632,
-        "commits_per_week": 38.05
+        "commits": 724,
+        "span_days": 138,
+        "active_day_ratio": 0.616,
+        "commits_per_week": 36.72
       },
       "change_shape": {
         "median_lines": 31,
@@ -153,6 +170,17 @@
         "top_author_share": 1.0,
         "bus_factor": 1
       }
+    },
+    "outcomes": {
+      "revert_pairs": {
+        "status": "scored",
+        "flagged": 4,
+        "matched": 4,
+        "unmatched": 0,
+        "median_days": 0.0
+      },
+      "change_failure_rate": 0.261,
+      "change_failure_commits": 189
     },
     "delivery_health": {
       "status": "scored",
@@ -183,13 +211,13 @@
       ],
       "descriptive": {
         "fix_revert_rate": 0.261,
-        "commits_per_week": 38.05,
-        "active_day_ratio": 0.632,
+        "commits_per_week": 36.72,
+        "active_day_ratio": 0.616,
         "contributors": 1
       }
     },
     "readiness": {
-      "score": 83,
+      "score": 85,
       "grade": "B"
     },
     "trajectory": {
@@ -203,7 +231,8 @@
           "commits": 40,
           "adoption_pct": 100.0,
           "health_score": 31,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-02-15",
@@ -211,7 +240,8 @@
           "commits": 83,
           "adoption_pct": 100.0,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-02-25",
@@ -219,7 +249,8 @@
           "commits": 16,
           "adoption_pct": 87.5,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-03-07",
@@ -227,7 +258,8 @@
           "commits": 1,
           "adoption_pct": 100.0,
           "health_score": null,
-          "health_status": "insufficient"
+          "health_status": "insufficient",
+          "breadth_pct": null
         },
         {
           "start": "2026-03-17",
@@ -235,7 +267,8 @@
           "commits": 141,
           "adoption_pct": 98.6,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-03-27",
@@ -243,7 +276,8 @@
           "commits": 65,
           "adoption_pct": 100.0,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-04-06",
@@ -251,7 +285,8 @@
           "commits": 22,
           "adoption_pct": 100.0,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-04-16",
@@ -259,7 +294,8 @@
           "commits": 36,
           "adoption_pct": 100.0,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-04-26",
@@ -267,7 +303,8 @@
           "commits": 53,
           "adoption_pct": 100.0,
           "health_score": 57,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-05-06",
@@ -275,7 +312,8 @@
           "commits": 80,
           "adoption_pct": 100.0,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-05-16",
@@ -283,7 +321,8 @@
           "commits": 139,
           "adoption_pct": 89.2,
           "health_score": 55,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-05-26",
@@ -291,7 +330,8 @@
           "commits": 29,
           "adoption_pct": 100.0,
           "health_score": 78,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-06-05",
@@ -299,15 +339,17 @@
           "commits": 17,
           "adoption_pct": 100.0,
           "health_score": 78,
-          "health_status": "scored"
+          "health_status": "scored",
+          "breadth_pct": null
         },
         {
           "start": "2026-06-15",
-          "end": "2026-06-17",
-          "commits": 1,
+          "end": "2026-06-22",
+          "commits": 2,
           "adoption_pct": 100.0,
           "health_score": null,
-          "health_status": "insufficient"
+          "health_status": "insufficient",
+          "breadth_pct": null
         }
       ]
     },
@@ -325,9 +367,9 @@
   "readiness": {
     "schema_version": "0.1",
     "repo": "crown",
-    "commit_sha": "36177f7d725fe15ea17f92a6cc428966c3cbb9aa",
-    "scanned_at": "2026-06-20T22:19:22Z",
-    "score": 83,
+    "commit_sha": "742342a15ed16c285225bad8f2693d474c3b7257",
+    "scanned_at": "2026-07-04T00:51:42Z",
+    "score": 85,
     "grade": "B",
     "categories": [
       {
@@ -338,7 +380,7 @@
       },
       {
         "id": "agent_instructions",
-        "points": 15,
+        "points": 15.0,
         "max": 15,
         "status": "scored"
       },
@@ -350,7 +392,7 @@
       },
       {
         "id": "setup_tooling",
-        "points": 9.4,
+        "points": 11.8,
         "max": 20,
         "status": "scored"
       },
@@ -374,7 +416,7 @@
         "has_readme": true,
         "readme_path": "README.md",
         "agent_file": "AGENTS.md",
-        "last_code_commit": "2026-06-17",
+        "last_code_commit": "2026-06-22",
         "waived": false
       },
       {
@@ -434,60 +476,94 @@
     ],
     "findings": [
       {
+        "detector": "setup",
+        "severity": "warn",
+        "path": ".",
+        "evidence": "Missing CI configuration",
+        "fix": "Add CI (e.g. .github/workflows) so agents can see how it's built and tested",
+        "area": "Setup",
+        "points_at_stake": 4.0,
+        "informational": false,
+        "effort": "moderate"
+      },
+      {
         "detector": "module_readme",
         "severity": "warn",
         "path": "scripts",
-        "evidence": "Module 'scripts' (dir) has no README",
-        "fix": "Add scripts/README.md describing this module"
+        "evidence": "Module 'scripts' (dir) has no README (2 .js files: genIcon.js, make_icon.py)",
+        "fix": "Add scripts/README.md \u2014 say what these 2 files do, how they fit together, and which is the entry point",
+        "area": "Module docs",
+        "points_at_stake": 3.0,
+        "informational": false,
+        "effort": "moderate",
+        "snippet": "# scripts\n\n<one-paragraph: what this directory does and when an agent should read it>\n\n## Files\n\n- `genIcon.js` \u2014 <one-line role>\n- `make_icon.py` \u2014 <one-line role>\n\n## Entry point\n\n`<file>` \u2014 <how an agent should start reading>\n"
       },
       {
         "detector": "module_readme",
         "severity": "warn",
         "path": "src/scenes",
-        "evidence": "Module 'src/scenes' (dir) has no README",
-        "fix": "Add src/scenes/README.md describing this module"
-      },
-      {
-        "detector": "setup",
-        "severity": "warn",
-        "path": ".",
-        "evidence": "Missing CI configuration",
-        "fix": "Add CI (e.g. .github/workflows) so agents can see how it's built and tested"
+        "evidence": "Module 'src/scenes' (dir) has no README (5 .js files: CreditsScene.js, GameOverScene.js, LoadingScene.js, \u2026)",
+        "fix": "Add src/scenes/README.md \u2014 say what these 5 files do, how they fit together, and which is the entry point",
+        "area": "Module docs",
+        "points_at_stake": 3.0,
+        "informational": false,
+        "effort": "moderate",
+        "snippet": "# scenes\n\n<one-paragraph: what this directory does and when an agent should read it>\n\n## Files\n\n- `CreditsScene.js` \u2014 <one-line role>\n- `GameOverScene.js` \u2014 <one-line role>\n- `LoadingScene.js` \u2014 <one-line role>\n- `\u2026` \u2014 <one-line role>\n\n## Entry point\n\n`<file>` \u2014 <how an agent should start reading>\n"
       },
       {
         "detector": "setup",
         "severity": "info",
         "path": ".",
         "evidence": "Missing formatter config",
-        "fix": "Add a formatter config (prettier / black / ruff / rustfmt)"
-      },
-      {
-        "detector": "setup",
-        "severity": "warn",
-        "path": ".",
-        "evidence": "Missing type config",
-        "fix": "Add type config (tsconfig.json / mypy / pyright / py.typed)"
+        "fix": "Add a formatter config (prettier / black / ruff / rustfmt)",
+        "area": "Setup",
+        "points_at_stake": 1.0,
+        "informational": false,
+        "effort": "quick"
       },
       {
         "detector": "setup",
         "severity": "info",
         "path": ".",
         "evidence": "Missing .editorconfig",
-        "fix": "Add an .editorconfig for consistent whitespace/style"
+        "fix": "Add an .editorconfig for consistent whitespace/style",
+        "area": "Setup",
+        "points_at_stake": 1.0,
+        "informational": false,
+        "effort": "quick"
       },
       {
         "detector": "setup",
         "severity": "info",
         "path": ".",
         "evidence": "Missing CONTRIBUTING",
-        "fix": "Add CONTRIBUTING with how to build, test, and submit changes"
+        "fix": "Add CONTRIBUTING with how to build, test, and submit changes",
+        "area": "Setup",
+        "points_at_stake": 1.0,
+        "informational": false,
+        "effort": "quick"
       },
       {
         "detector": "setup",
         "severity": "info",
         "path": ".",
         "evidence": "Missing LICENSE",
-        "fix": "Add a LICENSE file"
+        "fix": "Add a LICENSE file",
+        "area": "Setup",
+        "points_at_stake": 1.0,
+        "informational": false,
+        "effort": "quick"
+      },
+      {
+        "detector": "doc_stale",
+        "severity": "warn",
+        "path": "src/complete_tactical_trpg_rulebook.md",
+        "evidence": "complete_tactical_trpg_rulebook.md last updated 2026-05-14; 206 commits have landed since \u2014 likely behind the current code",
+        "fix": "Skim complete_tactical_trpg_rulebook.md and refresh anything the code has outgrown",
+        "area": "Freshness",
+        "points_at_stake": 0.0,
+        "informational": true,
+        "effort": "moderate"
       }
     ],
     "metrics": {
@@ -497,29 +573,36 @@
       "code_count": 65,
       "has_agent_file": true,
       "has_root_agent_file": true,
+      "agent_usefulness_root": "actionable",
+      "agent_usefulness_nested": null,
       "modules_total": 6,
       "modules_covered": 4,
       "broken_links": 0,
       "links_checked": 51,
       "drift_count": 0,
+      "fresh_score_sum": 4.0,
       "docs_checked": 4,
       "is_git": true,
       "mcp_present": false,
-      "setup_score_frac": 0.47058823529411764,
+      "setup_score_frac": 0.5882352941176471,
+      "setup_total_weight": 17,
       "setup_present": [
         "test_command",
         "dependency_manifest",
         "lockfile",
-        "lint_config"
+        "lint_config",
+        "architecture_doc"
       ],
       "setup_missing": [
         "ci_config",
         "format_config",
-        "type_config",
         "editorconfig",
         "contributing",
         "license"
-      ]
+      ],
+      "detected_test_cmd": "npm test",
+      "detected_build_cmd": "npm run build",
+      "ecosystem": "npm"
     }
   }
 }

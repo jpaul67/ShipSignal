@@ -45,6 +45,8 @@ Every impact scan headlines with three numbers that are *always* computed (above
 
 A fourth, *conditional* **Before/after AI Enablement** delta appears only when the data supports it — a clean pre-AI baseline window AND ≥ 20 commits in both windows AND ≥ 50 commits total AND ≥ 6 weeks of history. In the wild that combination is rare (most repos are AI-from-inception, no-AI, or ambient-AI), so it's the *bonus*, not the headline — competitors fake this score; we don't.
 
+An **Outcomes** block rides along as pure context, never scored: revert-pair count + median time-to-correction, computed from git's own `git revert` format (subject `Revert "..."` + body `This reverts commit <sha>`) plus explicit `Fixes:`/`Reverts:` trailers, matched by sha against the analyzed history — a revert-of-a-revert is just another pair, and unmatched reverts (target outside the window) are disclosed, not hidden. Reports `n/a` below 3 matched pairs. It's commit-scoped, not MTTR — production incidents aren't in git. Alongside it, the change-failure proxy (the fix/revert subject rate) is relabeled honestly: it measures commit-labeling discipline as much as failure rate, so it's forbidden from ever feeding Delivery Health.
+
 Calibrated across crown (Pervasive · 55/F · 83/B — flags a real test gap), chalk (None · 77/C · 80/B — flags maintainer concentration), vitest (Emerging · 97/A · 97/A — clean). Every delivery number carries an attribution caveat: it measures general delivery health, never *proves* AI caused a change.
 
 ## Readiness lens — is the repo set up for agents?

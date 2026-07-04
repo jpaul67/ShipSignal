@@ -51,6 +51,29 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "module README coverage, setup & convention files, link integrity, and "
                "doc freshness. Renormalizes over whatever applies.",
     },
+    "outcomes": {
+        "short": "How often changes get reverted or fixed, and how fast — outcome "
+                 "signals to complement the habit-based numbers above. Always "
+                 "context, never part of any score.",
+        "tip": "Revert pairs: a commit whose body matches git's own `git revert` "
+               "format (`Revert \"...\"` + `This reverts commit <sha>.`) or an "
+               "explicit `Fixes:`/`Reverts:` trailer, matched by sha against the "
+               "analyzed commit set — a revert-of-a-revert is just another pair. "
+               "Median time-to-correction = revert date − target date, over "
+               "matched pairs only; unmatched reverts (target outside the "
+               "window) are disclosed, not hidden. n/a below 3 matched pairs. "
+               "Not MTTR — this is commit-scoped; production incidents aren't "
+               "in git.",
+    },
+    "change_failure_proxy": {
+        "short": "Share of commits whose subject reads as a fix, hotfix, bug, or "
+                 "revert — a rough proxy for how often work needed correcting. "
+                 "Context only, never scored.",
+        "tip": "Subject-only heuristic (revert/fix/hotfix/bugfix/bug). Measures "
+               "commit-labeling discipline as much as failure rate: a repo with "
+               "honest `fix:` conventions must never score worse than one with "
+               "vague messages, so this never feeds Delivery Health.",
+    },
     # --- conditional / over-time ---
     "before_after": {
         "short": "When a clean pre-AI baseline exists, how delivery metrics shifted "
@@ -146,6 +169,7 @@ GLOSSARY: dict[str, dict[str, str]] = {
 HOWTO_ORDER = [
     ("AI Adoption", "ai_adoption"),
     ("Delivery Health", "delivery_health"),
+    ("Outcomes", "outcomes"),
     ("Readiness", "readiness"),
     ("Before/after AI Enablement", "before_after"),
     ("Trajectory", "trajectory"),

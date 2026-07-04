@@ -10,6 +10,16 @@ are git-tagged).
 ## [Unreleased]
 
 ### Added
+- **Outcomes: revert pairs & time-to-correction** (Package J). A new Outcomes block in the impact
+  text/Markdown/HTML output reports revert-pair count + median time-to-correction, matched by sha
+  against the analyzed history — git's own `git revert` body format (`Revert "..."` + `This
+  reverts commit <sha>`), or an explicit `Fixes:`/`Reverts:` trailer. A revert-of-a-revert is just
+  another pair; reverts whose target falls outside the analyzed window are disclosed as
+  `unmatched`, never dropped silently. Reports `n/a` below 3 matched pairs. Commit-scoped by
+  construction — not MTTR, since production incidents aren't in git. The existing fix/revert
+  subject rate is relabeled as the **change-failure proxy** and rendered alongside it: a
+  labeling-discipline signal, not a failure rate, and — like time-to-correction — forbidden from
+  ever feeding the Delivery Health score.
 - **`.shipsignal.toml` config file** (Package G). Repo-local defaults, picked up automatically
   by every command (including in CI): `extra_ai_aliases` and `squash` under `[impact]`;
   `fail_under` and `exclude_modules` under `[readiness]`; `badge_label` under `[report]`.

@@ -14,7 +14,7 @@ Pipelines:
 - `detectors.py` — doc/agent detectors (entry point, agent files, module README coverage, broken links, doc freshness) + false-positive guards.
 - `setupcheck.py` — setup & convention detectors (test command, CI, deps, lint/format/type config, convention files, MCP resolution).
 - `scoring.py` — the 0–100 readiness model with n/a + indeterminate handling and grade bands.
-- `impact.py` — Impact lens: single `git log --no-merges --numstat` pass; bot/merge exclusion; AI-co-author registry; adoption auto-detection; confidence gate; no-baseline path; pillar scoring + attribution caveat. `extra_aliases()` temporarily merges `.shipsignal.toml`'s extra AI aliases into the registry for one scan.
+- `impact.py` — Impact lens: single `git log --no-merges --numstat` pass; bot/merge exclusion; AI-co-author registry; adoption auto-detection; confidence gate; no-baseline path; pillar scoring + attribution caveat. `extra_aliases()` temporarily merges `.shipsignal.toml`'s extra AI aliases into the registry for one scan. `compute_outcomes()` (Package J) matches revert pairs by sha (git's own revert body line, or `Fixes:`/`Reverts:` trailers) for median time-to-correction, plus the relabeled change-failure proxy — displayed context only, never scored.
 - `timeline.py` — over-time trajectory: per-period adoption % + delivery health (tumbling windows, honest gaps).
 - `glossary.py` — explanatory copy (single source for inline lines, HTML tooltips, the "How to read this" block).
 - `report.py` — CLI text + Markdown/HTML reports (incl. SVG trajectory chart) + badge SVG/JSON (static + live shields.io endpoint); separate render functions for readiness vs impact.

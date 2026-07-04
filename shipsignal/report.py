@@ -585,14 +585,31 @@ def render_impact(result: dict, *, color: bool = False) -> str:
                 L.append(f"   {c['id']:<24} {_bar(c['score_frac'], 1.0, 12)} "
                          f"{c['score_frac'] * 100:.0f}%  (w{c['weight']}){flag}")
         d = dh["descriptive"]
-        L.append(f"   context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
-                 f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors")
+        L.append(f"   context (not scored): {d['commits_per_week']:g} commits/wk · "
+                 f"{d['contributors']} contributors")
         focus = _delivery_focus(dh, result["metrics"])
         if focus:
             L.append("")
             L.append("   Where to focus (general eng norms, not AI-attributed):")
             for it in focus:
                 L.append(f"    • {it['label']} — {it['detail']}")
+        L.append("")
+
+    # --- Outcomes (Package J): revert pairs / time-to-correction + the
+    # relabeled change-failure proxy — context, never scored. ---
+    oc = result.get("outcomes")
+    if oc:
+        rp = oc["revert_pairs"]
+        L.append("  Outcomes — context, not scored:")
+        L.append(f"   {glossary.short('outcomes')}")
+        if rp["status"] == "scored":
+            unmatched_s = f"  ({rp['unmatched']} unmatched)" if rp["unmatched"] else ""
+            L.append(f"   revert pairs {rp['matched']}  ·  median time-to-correction "
+                     f"{rp['median_days']:g}d{unmatched_s}")
+        else:
+            L.append(f"   revert pairs: n/a — {rp['reason']}")
+        L.append(f"   change-failure proxy {oc['change_failure_rate']:.0%} "
+                 f"({oc['change_failure_commits']} commits)")
         L.append("")
 
     # --- Before/after AI Enablement delta (the conditional bonus) ---
@@ -742,8 +759,8 @@ def render_impact_markdown(result: dict) -> str:
             val = f"{c['score_frac'] * 100:.0f}%" if c["score_frac"] is not None else c["status"]
             L.append(f"| {c['id']} | {val} | {c['weight']} | {c.get('flag') or ''} |")
         d = dh["descriptive"]
-        L += ["", f"*Context (not scored — too noisy to rank health by): fix/revert "
-              f"{d['fix_revert_rate']:.0%}, {d['commits_per_week']:g} commits/wk, "
+        L += ["", f"*Context (not scored — too noisy to rank health by): "
+              f"{d['commits_per_week']:g} commits/wk, "
               f"{d['contributors']} contributors.*", ""]
         focus = _delivery_focus(dh, result["metrics"])
         if focus:
@@ -753,6 +770,22 @@ def render_impact_markdown(result: dict) -> str:
     else:
         L += ["## Delivery Health", "",
               f"*Insufficient data — {dh['reason']}.*", ""]
+
+    # Outcomes (Package J): revert pairs / time-to-correction + the relabeled
+    # change-failure proxy — context, never scored.
+    oc = result.get("outcomes")
+    if oc:
+        rp = oc["revert_pairs"]
+        L += ["## Outcomes (context — never scored)", ""]
+        if rp["status"] == "scored":
+            unmatched_md = f" ({rp['unmatched']} unmatched)" if rp["unmatched"] else ""
+            L.append(f"- **Revert pairs:** {rp['matched']} · median time-to-correction "
+                     f"**{rp['median_days']:g}d**{unmatched_md}")
+        else:
+            L.append(f"- *Revert pairs: n/a — {rp['reason']}.*")
+        L.append(f"- **Change-failure proxy:** {oc['change_failure_rate']:.0%} "
+                 f"({oc['change_failure_commits']} commits)")
+        L += ["", f"_<sub>{glossary.short('outcomes')}</sub>_", ""]
 
     # Over-time trajectory (always included when there's enough history).
     traj = result.get("trajectory") or {}
@@ -966,7 +999,7 @@ def render_impact_html(result: dict) -> str:
                          f"{c['score_frac'] * 100:.0f}%'></span></div>"
                          f"<div class='num'>{c['score_frac'] * 100:.0f}% {flag}</div></div>")
         d = dh["descriptive"]
-        ctx = (f"<p class='hint'>Context (not scored): fix/revert {d['fix_revert_rate']:.0%} · "
+        ctx = (f"<p class='hint'>Context (not scored): "
                f"{d['commits_per_week']:g} commits/wk · {d['contributors']} contributors.</p>")
         focus = _delivery_focus(dh, result["metrics"])
         focus_html = ""
@@ -981,6 +1014,28 @@ def render_impact_html(result: dict) -> str:
     else:
         health_block = (f"<h2>{_tip('Delivery Health', 'delivery_health')}</h2>"
                         f"<div class='withheld'>Insufficient data — {_esc(dh['reason'])}.</div>")
+
+    # --- Outcomes (Package J): revert pairs / time-to-correction + the
+    # relabeled change-failure proxy — context, never scored. ---
+    oc = result.get("outcomes")
+    if oc:
+        rp = oc["revert_pairs"]
+        if rp["status"] == "scored":
+            unmatched_html = (f" <span class='hint'>({rp['unmatched']} unmatched)</span>"
+                              if rp["unmatched"] else "")
+            revert_line = (f"Revert pairs: <b>{rp['matched']}</b> · median "
+                           f"time-to-correction <b>{rp['median_days']:g}d</b>{unmatched_html}")
+        else:
+            revert_line = f"<span class='hint'>Revert pairs: n/a — {_esc(rp['reason'])}.</span>"
+        outcomes_block = (
+            f"<h2>{_tip('Outcomes', 'outcomes')} "
+            f"<span class='hint'>context, never scored</span></h2>"
+            f"<p>{revert_line}</p>"
+            f"<p class='hint'>Change-failure proxy: {oc['change_failure_rate']:.0%} "
+            f"({oc['change_failure_commits']} commits)</p>"
+        )
+    else:
+        outcomes_block = ""
 
     # --- before/after bonus ---
     if result.get("score_status") == "scored":
@@ -1074,6 +1129,8 @@ def render_impact_html(result: dict) -> str:
 </div>
 
 {health_block}
+
+{outcomes_block}
 
 {bonus_block}
 

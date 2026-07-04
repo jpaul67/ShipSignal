@@ -69,6 +69,11 @@ _TEST_PATH_RE = re.compile(
     r"(?:^|/)[^/]+[._-](?:test|spec)\.[a-z0-9]+$",
     re.IGNORECASE,
 )
+# Package J — revert-pair detection. Git's own `git revert` writes an explicit,
+# unambiguous body line naming the target sha; explicit `Fixes:`/`Reverts:`
+# trailers (a convention, not a git built-in) name it as a trailer instead.
+_REVERT_BODY_RE = re.compile(r"This reverts commit ([0-9a-f]{7,40})\b", re.IGNORECASE)
+_CORRECTION_TRAILER_RE = re.compile(r"^(?:fixes|reverts):\s*([0-9a-f]{7,40})\b", re.IGNORECASE)
 # Two kinds of bot, treated very differently:
 #   * MAINTENANCE bots (renovate/dependabot/CI) — automation noise. Excluded
 #     entirely so cadence, change-shape, contributors aren't distorted (renovate
@@ -203,6 +208,7 @@ class Commit:
     files: list[str] = field(default_factory=list)
     lines_added: int = 0
     lines_deleted: int = 0
+    body: str = ""
 
     @property
     def total_lines(self) -> int:
@@ -255,6 +261,19 @@ class Commit:
         return bool(_FIX_RE.match(self.subject))
 
     @property
+    def revert_target_sha(self) -> str | None:
+        """The sha this commit corrects, from git's own revert body line or an
+        explicit ``Fixes:``/``Reverts:`` trailer — None if neither is present."""
+        m = _REVERT_BODY_RE.search(self.body)
+        if m:
+            return m.group(1).lower()
+        for t in self.trailers:
+            m = _CORRECTION_TRAILER_RE.match(t.strip())
+            if m:
+                return m.group(1).lower()
+        return None
+
+    @property
     def touches_tests(self) -> bool:
         return any(_TEST_PATH_RE.search(p) for p in self.files)
 
@@ -270,10 +289,13 @@ class Commit:
 
 # ---------------------------------------------------------------------------
 # History walker — one `git log --numstat` pass.
-# Format: __BWREC__<hash>\x1f<aI>\x1f<email>\x1f<subject>\x1f<trailers>\n\n<numstat>
+# Format: __BWREC__<hash>\x1f<aI>\x1f<email>\x1f<subject>\x1f<trailers>\x1f<body>\x1e<numstat>
+# The \x1e sentinel (not \n\n) marks the header/numstat boundary: unlike a
+# subject or trailers, a raw commit body (%b) can itself contain blank lines,
+# which would confuse a naive partition("\n\n") split.
 # ---------------------------------------------------------------------------
 _REC = "__BWREC__"
-_FMT = f"{_REC}%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:only,unfold)"
+_FMT = f"{_REC}%H%x1f%aI%x1f%ae%x1f%s%x1f%(trailers:only,unfold)%x1f%b%x1e"
 
 
 def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
@@ -293,9 +315,9 @@ def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
         return []
     commits: list[Commit] = []
     for chunk in out.split(_REC)[1:]:
-        header, _, body = chunk.partition("\n\n")
+        header, _, numstat_blob = chunk.partition("\x1e")
         try:
-            sha, date_iso, email, subject, trailers_blob = header.split("\x1f", 4)
+            sha, date_iso, email, subject, trailers_blob, body = header.split("\x1f", 5)
         except ValueError:
             continue
         try:
@@ -305,7 +327,7 @@ def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
         trailers = [ln.strip() for ln in trailers_blob.splitlines() if ln.strip()]
         files: list[str] = []
         adds = dels = 0
-        for ln in body.splitlines():
+        for ln in numstat_blob.splitlines():
             if not ln.strip():
                 continue
             parts = ln.split("\t")
@@ -318,7 +340,9 @@ def walk_history(root: Path, timeout: int = 600) -> list[Commit]:
                 dels += int(b)
             except ValueError:
                 pass  # binary files show as "-\t-\tpath"
-        commits.append(Commit(sha, d, email, subject.strip(), trailers, files, adds, dels))
+        commits.append(
+            Commit(sha, d, email, subject.strip(), trailers, files, adds, dels, body)
+        )
     return commits
 
 
@@ -436,6 +460,71 @@ def quality_metrics(commits: list[Commit]) -> dict:
         "test_to_code_ratio": round(tests / code, 3) if code else None,
         "test_touch_commits": tests,
         "code_touch_commits": code,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Package J — Outcomes: revert pairs & time-to-correction.
+# Displayed context only — NEVER folded into the Delivery Health score (see
+# ATTRIBUTION_CAVEAT / glossary "outcomes" entry). Commit-scoped by
+# construction: this is not MTTR, since production incidents aren't in git.
+# ---------------------------------------------------------------------------
+MIN_REVERT_PAIRS_FOR_MEDIAN = 3
+
+
+def compute_outcomes(commits: list[Commit], quality: dict) -> dict:
+    """Revert-pair count + median time-to-correction, plus the (unscored)
+    change-failure proxy carried over from ``quality_metrics``.
+
+    A revert pair is a commit whose body names a target sha (git's own
+    ``git revert`` format, or an explicit ``Fixes:``/``Reverts:`` trailer)
+    where that target sha is itself inside the analyzed commit set — a
+    revert-of-a-revert is just another pair, matched the same way. Reverts
+    whose target isn't in the window (or wasn't found) are disclosed as
+    unmatched, never silently dropped.
+    """
+    by_sha = {c.sha: c for c in commits}
+    days: list[int] = []
+    flagged = 0
+    unmatched = 0
+    for c in commits:
+        target = c.revert_target_sha
+        if target is None:
+            continue
+        flagged += 1
+        tgt = by_sha.get(target)
+        if tgt is None and len(target) < 40:
+            candidates = [x for sha, x in by_sha.items()
+                          if sha != c.sha and sha.startswith(target)]
+            tgt = candidates[0] if len(candidates) == 1 else None
+        if tgt is None or tgt.sha == c.sha:
+            unmatched += 1
+            continue
+        days.append((c.date - tgt.date).days)
+
+    matched = len(days)
+    if matched < MIN_REVERT_PAIRS_FOR_MEDIAN:
+        revert_pairs = {
+            "status": "n/a",
+            "reason": f"only {matched} revert pair(s) matched (need "
+                      f"{MIN_REVERT_PAIRS_FOR_MEDIAN} to time)",
+            "flagged": flagged, "matched": matched, "unmatched": unmatched,
+            "median_days": None,
+        }
+    else:
+        revert_pairs = {
+            "status": "scored",
+            "flagged": flagged, "matched": matched, "unmatched": unmatched,
+            "median_days": _percentile([float(d) for d in days], 50),
+        }
+    return {
+        "revert_pairs": revert_pairs,
+        # Relabeled fix/revert subject share (Package J step 3): a
+        # commit-labeling-discipline proxy, not a failure rate — a repo with
+        # honest `fix:` conventions must never score worse than a vague one.
+        # Context only; never scored (see delivery_health).
+        "change_failure_rate": quality["fix_rate"],
+        "change_failure_commits": quality["fix_commits"],
     }
 
 
@@ -929,6 +1018,10 @@ def compute_impact(
         "quality": quality_metrics(commits),
         "people": people_metrics(commits),
     }
+
+    # --- Outcomes (Package J): revert pairs / time-to-correction + the
+    # relabeled change-failure proxy — displayed context, never scored.
+    result["outcomes"] = compute_outcomes(commits, result["metrics"]["quality"])
 
     # --- The three always-on headline numbers ---
     # 1) AI adoption level (above), 2) delivery-health snapshot, 3) readiness.
