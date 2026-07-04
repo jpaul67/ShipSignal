@@ -9,6 +9,8 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-03
+
 ### Added
 - **Release cadence & lead time from tags** (Package K). A new block reports tags-per-month +
   median gap between tags (trailing 12 months, falling back to the full tag history when sparse —
