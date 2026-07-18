@@ -1,0 +1,4 @@
+{
+  "message": "This is a JSON object, not the array of PRs the recipe emits.",
+  "data": [1, 2, 3]
+}

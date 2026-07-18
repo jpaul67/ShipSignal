@@ -1,0 +1,113 @@
+[
+  {
+    "number": 29612,
+    "mergeCommit": {
+      "oid": "a46d5f8dd4a9e5a821c7c7f54ef5d2e5999e445d"
+    },
+    "mergedAt": "2026-06-21T11:21:14Z",
+    "commits": [
+      {
+        "oid": "5da7ab6e2b24948c188650c46fdb7d15bfbec034",
+        "messageHeadline": "docs(claude): add path-scoped frontmatter to four agent rules",
+        "authors": [
+          {
+            "email": "idolevit2@gmail.com",
+            "id": "MDQ6VXNlcjYyMzQ3NzM0",
+            "login": "idolevitt",
+            "name": "Ido Levitt"
+          },
+          {
+            "email": "noreply@anthropic.com",
+            "id": "MDQ6VXNlcjgxODQ3",
+            "login": "claude",
+            "name": "Claude Sonnet 4.6"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "number": 29556,
+    "mergeCommit": {
+      "oid": "642c38582efe5a5d3210c9abf7742a87b0e4ce5c"
+    },
+    "mergedAt": "2026-06-14T07:05:49Z",
+    "commits": [
+      {
+        "oid": "51488149d6a431d5ae1355708f42880bfcbd936a",
+        "messageHeadline": "fix: correct CLAUDE.md symlink casing to AGENTS.md",
+        "authors": [
+          {
+            "email": "jroemhild68@gmail.com",
+            "id": "MDQ6VXNlcjc4MjQ4NjA0",
+            "login": "oeme-github",
+            "name": "oeme"
+          },
+          {
+            "email": "noreply@anthropic.com",
+            "id": "MDQ6VXNlcjgxODQ3",
+            "login": "claude",
+            "name": "Claude Sonnet 4.6"
+          }
+        ]
+      },
+      {
+        "oid": "a597034d3b4289fd25c22c5289244823e3ec8aac",
+        "messageHeadline": "Merge branch 'main' into fix/claude-md-symlink-casing",
+        "authors": [
+          {
+            "email": "133476557+bandhan-majumder@users.noreply.github.com",
+            "id": "U_kgDOB_SwzQ",
+            "login": "bandhan-majumder",
+            "name": "Bandhan Majumder"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "number": 29724,
+    "mergeCommit": {
+      "oid": "ca90ca2c94536c7fac97e4e829cdfe18624c7f10"
+    },
+    "mergedAt": "2026-07-06T08:40:18Z",
+    "commits": [
+      {
+        "oid": "c13fbf42cee8b935ca06529172a5028b1419674c",
+        "messageHeadline": "refactor(app-store): move credential query to repository pattern",
+        "authors": [
+          {
+            "email": "143536290+SinghaAnirban005@users.noreply.github.com",
+            "id": "U_kgDOCI4wog",
+            "login": "SinghaAnirban005",
+            "name": "Anirban Singha"
+          }
+        ]
+      },
+      {
+        "oid": "35bee2f3878bb4114aa28b1fcab4968daa0e181b",
+        "messageHeadline": "chore: removed unused imports",
+        "authors": [
+          {
+            "email": "143536290+SinghaAnirban005@users.noreply.github.com",
+            "id": "U_kgDOCI4wog",
+            "login": "SinghaAnirban005",
+            "name": "Anirban Singha"
+          }
+        ]
+      },
+      {
+        "oid": "c8eedfbc9c4c876b8254687ece075e402beab06e",
+        "messageHeadline": "Merge branch 'main' into ref/app",
+        "authors": [
+          {
+            "email": "133476557+bandhan-majumder@users.noreply.github.com",
+            "id": "U_kgDOB_SwzQ",
+            "login": "bandhan-majumder",
+            "name": "Bandhan Majumder"
+          }
+        ]
+      }
+    ]
+  }
+]

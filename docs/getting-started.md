@@ -69,11 +69,20 @@ shipsignal report ./my-repo --html audit.html --md audit.md --json audit.json
 
 ### AI Adoption
 
-Counts commits with an AI `Co-Authored-By:` trailer (Claude, Copilot, etc.) plus commits authored by AI coding-agent bots (Devin, gpt-engineer, etc.), over all development commits (maintenance bots excluded). Reported as a **lower bound** — squash-merges drop trailers.
+Counts commits with an AI `Co-Authored-By:` trailer (Claude, Copilot, etc.) plus commits authored by AI coding-agent bots (Devin, gpt-engineer, etc.), over all development commits (maintenance bots excluded). Reported as a **lower bound**: GitHub-native squash keeps co-authors, but some pipelines (internal-sync bots, some merge queues) strip them — `--pr-data` recovers those (below).
 
 Banded: **None** / **Emerging** (<10%) / **Established** (<50%) / **Pervasive** (>=50%).
 
 Also shows **breadth** — the share of active contributors with at least one AI commit. Team-level only; ShipSignal never scores, ranks, or lists individual developers.
+
+**Recovering squash-dropped attribution (`--pr-data`).** If your merge pipeline strips `Co-Authored-By` trailers — internal-monorepo sync bots, some merge queues, manual local squashes — the local adoption number undercounts AI. Recover it with **zero network calls**: you export the PR data, ShipSignal reads the local file.
+
+```bash
+gh pr list --state merged --limit 25 --json number,mergeCommit,mergedAt,commits > pr.json
+shipsignal impact <repo> --pr-data pr.json
+```
+
+ShipSignal matches each squash commit to its PR by merge-commit SHA (or `(#NNN)` subject) and shows a dual figure — `measured X% · recovered Y%` with match coverage — never replacing the measured number. Coverage discloses staleness: a partial export reads as low coverage, not a confident number. On repos with many or large PRs, `--limit 1000` in one call hits GitHub's GraphQL node ceiling, so export in chunks of ~25. **Most GitHub repos need nothing here** — native squash already preserves co-authors, and the report only nudges you toward `--pr-data` when it detects a squash workflow that might be undercounting.
 
 ### Delivery Health
 

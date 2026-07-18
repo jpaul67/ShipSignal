@@ -10,7 +10,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import ansi, config, gitinfo, impact, report, scanner, snapshot, trend
+from . import ansi, config, gitinfo, impact, prdata, report, scanner, snapshot, trend
 
 _SHORTHAND = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -118,6 +118,20 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _load_pr_data(args: argparse.Namespace) -> tuple[prdata.PRData | None, int | None]:
+    """Load --pr-data (Package D squash-recovery) if given. Returns
+    (pr_data, exit_code): a malformed file the user explicitly passed is a usage
+    error — print it and exit 2, never degrade to a silent zero."""
+    path = getattr(args, "pr_data", None)
+    if not path:
+        return None, None
+    try:
+        return prdata.load_pr_data(Path(path)), None
+    except prdata.PRDataError as exc:
+        print(f"  error: {exc}", file=sys.stderr)
+        return None, 2
+
+
 def _cmd_impact(args: argparse.Namespace) -> int:
     # Impact needs blobs for `git log --numstat` → full clone for remote targets.
     root, label, tmp, err = _resolve_target(args.target, treeless=False)
@@ -128,6 +142,9 @@ def _cmd_impact(args: argparse.Namespace) -> int:
     try:
         cfg = _load_config(root)
         squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
+        pr_data, prd_err = _load_pr_data(args)
+        if prd_err is not None:
+            return prd_err
         # Readiness runs by default so the three-number header is always complete.
         # --no-readiness skips it (e.g. to save a few seconds on a huge repo).
         readiness_score: int | None = None
@@ -147,6 +164,7 @@ def _cmd_impact(args: argparse.Namespace) -> int:
                 readiness_score=readiness_score,
                 squash_override=squash_override,
                 release_tag_pattern=cfg.impact.release_tag_pattern,
+                pr_data=pr_data,
             )
         print(report.render_impact(result, color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
@@ -200,6 +218,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
     try:
         cfg = _load_config(root)
         squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
+        pr_data, prd_err = _load_pr_data(args)
+        if prd_err is not None:
+            return prd_err
         readiness_result = scanner.scan(
             root, repo_label=label, exclude_modules=cfg.readiness.exclude_modules
         )
@@ -211,6 +232,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
                 readiness_score=readiness_result.get("score"),
                 squash_override=squash_override,
                 release_tag_pattern=cfg.impact.release_tag_pattern,
+                pr_data=pr_data,
             )
         print(report.render_unified(impact_result, readiness_result,
                                     color=ansi.resolve_enabled(args.no_color)))
@@ -291,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="treat the history as squash-merged — flag AI adoption as a "
                                "floor (for workflows whose squash commits lack a (#NNN) subject) "
                                "(default: .shipsignal.toml's [impact].squash, else off)")
+    impact_p.add_argument("--pr-data", metavar="FILE", default=None,
+                          help="recover AI attribution dropped by a squash/merge pipeline from an "
+                               "exported PR-data file (zero network: you run the gh export, "
+                               "ShipSignal reads the local file) — see docs/getting-started.md")
     impact_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
     impact_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
@@ -316,6 +342,10 @@ def main(argv: list[str] | None = None) -> int:
                           help="treat the history as squash-merged — flag AI adoption as a "
                                "floor (for workflows whose squash commits lack a (#NNN) subject) "
                                "(default: .shipsignal.toml's [impact].squash, else off)")
+    report_p.add_argument("--pr-data", metavar="FILE", default=None,
+                          help="recover AI attribution dropped by a squash/merge pipeline from an "
+                               "exported PR-data file (zero network: you run the gh export, "
+                               "ShipSignal reads the local file) — see docs/getting-started.md")
     report_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "
