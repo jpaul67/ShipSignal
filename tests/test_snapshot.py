@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -169,7 +170,7 @@ class TestCLISnapshot(unittest.TestCase):
         _git_commit(d, env, "init", "2026-05-15 12:00:00")
         env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         rc = subprocess.run(
-            ["python", "-m", "shipsignal.cli", "scan", str(d), "--snapshot"],
+            [sys.executable, "-m", "shipsignal.cli", "scan", str(d), "--snapshot"],
             cwd=REPO, capture_output=True, env=env,
         )
         self.assertEqual(rc.returncode, 0, rc.stderr.decode("utf-8", errors="replace"))
@@ -188,7 +189,7 @@ class TestCLISnapshot(unittest.TestCase):
         explicit = d / "custom" / "snap.json"
         env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
         rc = subprocess.run(
-            ["python", "-m", "shipsignal.cli", "scan", str(d),
+            [sys.executable, "-m", "shipsignal.cli", "scan", str(d),
              "--snapshot", str(explicit)],
             cwd=REPO, capture_output=True, env=env,
         )
