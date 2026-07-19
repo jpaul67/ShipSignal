@@ -41,6 +41,10 @@ means.
   ShipSignal at a remote instead of a local path.
 - Write output only where you ask (`--json` / `--md` / `--html` / `--badge`) and, with
   `--snapshot`, small JSON records under `.shipsignal/` (gitignored by default).
+- With `--pr-data FILE` (the Impact lens's squash-attribution recovery), read a **local** file
+  **you** exported yourself with `gh`. ShipSignal never fetches it and holds no token — you run
+  the export, ShipSignal only reads the file off disk. The zero-network posture is unchanged:
+  squash recovery adds no outbound call.
 
 **It does not:**
 

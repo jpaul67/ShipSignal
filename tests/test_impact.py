@@ -603,7 +603,7 @@ class TestSquashCaveatRender(unittest.TestCase):
 
     def test_caveat_in_cli(self):
         self.assertIn("squash", self.report.render_impact(self.forced).lower())
-        self.assertNotIn("floor (squash)", self.report.render_impact(self.normal))
+        self.assertNotIn("may undercount", self.report.render_impact(self.normal))
 
     def test_caveat_in_markdown(self):
         self.assertIn("squash-merge workflow",

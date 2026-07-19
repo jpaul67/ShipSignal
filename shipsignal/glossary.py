@@ -20,8 +20,21 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "Co-Authored-By: trailer (Claude, Copilot, …) PLUS commits authored by an "
                "AI coding-agent bot (gpt-engineer, devin, …) — over all development "
                "commits (maintenance bots like renovate/dependabot excluded). A lower "
-               "bound: squash-merges drop trailers. Banded None / Emerging (<10%) / "
+               "bound: GitHub-native squash preserves co-authors, but some pipelines "
+               "(internal-sync bots, some merge queues) strip them — export PR data with "
+               "--pr-data to recover those. Banded None / Emerging (<10%) / "
                "Established (<50%) / Pervasive (≥50%).",
+    },
+    "ai_adoption_recovery": {
+        "short": "With --pr-data, adoption re-attributed from exported PR records — "
+                 "recovering AI co-authors a squash/merge pipeline dropped locally. Shown "
+                 "beside the measured figure, never replacing it.",
+        "tip": "Matches local squash commits back to their PRs by merge-commit SHA (or the "
+               "(#NNN) subject), then runs the PR's co-authors through the SAME AI registry "
+               "as local trailers. Coverage = squash commits matched ÷ squash commits in "
+               "the window, so a stale or partial export reads as low coverage, not a "
+               "confident number. Zero network: you run the gh export, ShipSignal reads the "
+               "local file.",
     },
     "adoption_breadth": {
         "short": "What fraction of active humans on the team have at least one "

@@ -1,0 +1,17 @@
+[
+  {
+    "number": 999,
+    "mergeCommit": null,
+    "mergedAt": "2026-01-01T00:00:00Z",
+    "commits": [
+      {
+        "oid": "abc1230000000000000000000000000000000000",
+        "messageHeadline": "feat: rebase-merged, no merge commit (#999)",
+        "authors": [
+          { "name": "Human Dev", "email": "human@example.com", "login": "human", "id": "U_1" },
+          { "name": "Claude", "email": "noreply@anthropic.com", "login": "", "id": "U_2" }
+        ]
+      }
+    ]
+  }
+]

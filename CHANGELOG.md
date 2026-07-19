@@ -9,6 +9,32 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-07-18
+
+### Added
+- **Squash-attribution recovery** (Package D). `--pr-data FILE` on `impact` and `report` recovers
+  AI `Co-Authored-By` attribution that a non-native squash/merge pipeline dropped, **with zero
+  network calls**: you export your merged-PR data with one `gh` command
+  (`gh pr list --state merged --limit 25 --json number,mergeCommit,mergedAt,commits > pr.json`)
+  and ShipSignal reads the local file. It matches each squash commit to its PR by merge-commit
+  SHA (or the `(#NNN)` subject), runs the PR's co-authors through the same AI registry as local
+  trailers, and renders a **dual figure** — `measured X% · recovered Y%` with match coverage —
+  that never replaces the measured number, so a stale/partial export reads as low coverage, not
+  false confidence. When a squash workflow is detected and no `--pr-data` is supplied, the report
+  prints the export recipe itself (the discovery loop). New module `shipsignal/prdata.py` — pure
+  parsing, no network (enforced by an import-scan test). On big repos `--limit 1000` in one call
+  trips GitHub's GraphQL node ceiling; export in chunks of ~25.
+
+### Changed
+- **Corrected the squash caveat's framing.** Calibration against real repos (vite, prettier,
+  cal.com, pydantic, electron, react — all retain — vs jest, which drops) confirmed **GitHub-native
+  "Squash and merge" preserves co-authors** by aggregating them onto the squash commit, so a squash
+  workflow is *not* automatically an adoption floor. The CLI/Markdown/HTML caveat, the JSON
+  `adoption.note`, and the glossary copy no longer claim "squash-merges drop trailers"; they now
+  say adoption may be undercounted *only if* the pipeline strips them (internal-sync bots, some
+  merge queues, manual squashes), and point to `--pr-data` to check or recover. Output for repos
+  run without `--pr-data` is otherwise unchanged.
+
 ## [0.9.0] — 2026-07-03
 
 ### Added

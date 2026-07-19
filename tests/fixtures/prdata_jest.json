@@ -1,0 +1,239 @@
+[
+  {
+    "number": 16237,
+    "mergeCommit": {
+      "oid": "1da1579e89650f539130aa2b471f5c99a87e9e25"
+    },
+    "mergedAt": "2026-06-21T12:13:06Z",
+    "commits": [
+      {
+        "oid": "a8e9e2847d4b7f3ea9e58fd110a3f6c6ad477d15",
+        "messageHeadline": "fix(jest-mock): walk overloads in ResolveType/RejectType",
+        "authors": [
+          {
+            "email": "78000697+tsushanth@users.noreply.github.com",
+            "id": "MDQ6VXNlcjc4MDAwNjk3",
+            "login": "tsushanth",
+            "name": "tsushanth"
+          },
+          {
+            "email": "noreply@anthropic.com",
+            "id": "MDQ6VXNlcjgxODQ3",
+            "login": "claude",
+            "name": "Claude Opus 4.7 (1M context)"
+          }
+        ]
+      },
+      {
+        "oid": "4db2389746daf8265e05208591019c5302057e4d",
+        "messageHeadline": "fix(jest-mock): switch any[] to Array<any> in OverloadedReturnType",
+        "authors": [
+          {
+            "email": "78000697+tsushanth@users.noreply.github.com",
+            "id": "MDQ6VXNlcjc4MDAwNjk3",
+            "login": "tsushanth",
+            "name": "tsushanth"
+          }
+        ]
+      },
+      {
+        "oid": "60d3b681f2703357200c754611ac4c9c9f7c63f5",
+        "messageHeadline": "fix(jest-mock): guard never-distribution in ResolveType/RejectType",
+        "authors": [
+          {
+            "email": "78000697+tsushanth@users.noreply.github.com",
+            "id": "MDQ6VXNlcjc4MDAwNjk3",
+            "login": "tsushanth",
+            "name": "tsushanth"
+          }
+        ]
+      },
+      {
+        "oid": "fc3556bf0c5cb96c4632fe788c469d771f88ab1b",
+        "messageHeadline": "fix(jest-mock): prettier-format ResolveType/RejectType tuple guard",
+        "authors": [
+          {
+            "email": "78000697+tsushanth@users.noreply.github.com",
+            "id": "MDQ6VXNlcjc4MDAwNjk3",
+            "login": "tsushanth",
+            "name": "tsushanth"
+          }
+        ]
+      },
+      {
+        "oid": "89c792e6d8153415e2ab988bf906ff0efc638acf",
+        "messageHeadline": "fix(jest-mock): apply repo-pinned prettier 3.8.3 to satisfy CI",
+        "authors": [
+          {
+            "email": "78000697+tsushanth@users.noreply.github.com",
+            "id": "MDQ6VXNlcjc4MDAwNjk3",
+            "login": "tsushanth",
+            "name": "tsushanth"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "number": 16182,
+    "mergeCommit": {
+      "oid": "b91717a68e091cf492a361d61906d17849fb3282"
+    },
+    "mergedAt": "2026-05-15T10:18:32Z",
+    "commits": [
+      {
+        "oid": "c444fdf56712a5af8662beea99568e0539360165",
+        "messageHeadline": "refresh agent instructions",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "cbe2d8c41d8126c770ebc3f1de80b89918af53db",
+        "messageHeadline": "second pass",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "6c1e7f1df874a77a41e2b4434d648dc0457453c6",
+        "messageHeadline": "specific instructions for runtime",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "0b1bbd171cf6af1832128349df1558f2a9eef4ba",
+        "messageHeadline": "specific instructions for haste-map",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "8bcf30dbb444ea3d8a15a944ccbf0f3d75d63ffe",
+        "messageHeadline": "and some smaller ones",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "33a47b666f685cb7e1e29ec4a5a908715ac2d633",
+        "messageHeadline": "simplify",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "e499f936225a1f545860b2a5c352de7cadbe8ea0",
+        "messageHeadline": "review",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      },
+      {
+        "oid": "2fb32b3e67202265392590b3e0ec45ab327a90f3",
+        "messageHeadline": "fix: correct factual errors in coding agent instructions",
+        "authors": [
+          {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "id": "BOT_kgDOC9w8XQ",
+            "login": "Copilot",
+            "name": "copilot-swe-agent[bot]"
+          },
+          {
+            "email": "1404810+SimenB@users.noreply.github.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "SimenB"
+          }
+        ]
+      },
+      {
+        "oid": "4fe2983b5c22191994b8314e9baa245f95c5ec01",
+        "messageHeadline": "fix(eslint): enforce no node: protocol in browser-bundle packages; ad\u00e2\u20ac\u00a6",
+        "authors": [
+          {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "id": "BOT_kgDOC9w8XQ",
+            "login": "Copilot",
+            "name": "copilot-swe-agent[bot]"
+          },
+          {
+            "email": "1404810+SimenB@users.noreply.github.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "SimenB"
+          }
+        ]
+      },
+      {
+        "oid": "d6b96c26839e4617abff5450a90b847fdfdd2599",
+        "messageHeadline": "prettier",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "number": 16265,
+    "mergeCommit": {
+      "oid": "f49721c78e195558b40913977c9230f5b7f559d8"
+    },
+    "mergedAt": "2026-06-24T09:42:12Z",
+    "commits": [
+      {
+        "oid": "7d6c8f81463ed67046a5b27675abaad26530a025",
+        "messageHeadline": "chore: update a couple of deps",
+        "authors": [
+          {
+            "email": "sbekkhus91@gmail.com",
+            "id": "MDQ6VXNlcjE0MDQ4MTA=",
+            "login": "SimenB",
+            "name": "Simen Bekkhus"
+          }
+        ]
+      }
+    ]
+  }
+]

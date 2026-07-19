@@ -47,7 +47,7 @@ class TestSelfDocumentingHtml(unittest.TestCase):
         self.assertIn("class='tip'", h)             # layer 2 tooltips present
         self.assertIn("title=", h)
         # a known tip string appears (escaped HTML still contains the words)
-        self.assertIn("squash-merges drop", h)
+        self.assertIn("preserves co-authors", h)
 
     def test_unified_html_tooltips_on_readiness_categories(self):
         h = report.render_unified_html(self.impact, self.readiness)

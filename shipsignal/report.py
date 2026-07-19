@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 from html import escape as _esc
 
-from . import __version__, ansi, glossary
+from . import __version__, ansi, glossary, prdata
 from .detectors import AREA_ORDER
 
 GRADE_COLOR = {"A": "#4c1", "B": "#97ca00", "C": "#dfb317", "D": "#fe7d37", "F": "#e05d44"}
@@ -473,12 +473,81 @@ def _delivery_focus(dh: dict, metrics: dict) -> list[dict]:
 
 
 def _squash_caveat(ad: dict) -> str | None:
-    """One-line caveat when a squash workflow likely undercounts adoption, else None."""
+    """One-line caveat when a squash workflow *might* undercount adoption, else None.
+
+    Calibrated wording (Package D): GitHub-native squash PRESERVES co-authors, so
+    a squash workflow is not automatically a floor — only pipelines that strip
+    trailers (internal-sync bots, some merge queues) undercount. Suppressed once
+    --pr-data has actually resolved the question (the recovery line speaks then).
+    """
+    if ad.get("recovery") is not None:
+        return None
     if not ad.get("squash_suspected"):
         return None
     how = "declared" if ad.get("squash_source") == "declared" else "detected"
-    return (f"squash-merge workflow {how} — Co-Authored-By trailers are dropped on squash, "
-            f"so AI adoption is undercounted; treat it as a floor, not a measurement")
+    return (f"squash-merge workflow {how} — GitHub-native squash keeps co-authors, but if "
+            f"your pipeline strips them (internal-sync bots, some merge queues) adoption is "
+            f"undercounted")
+
+
+def _pct(share: float) -> str:
+    """Adoption percentage for display. `.0f` normally, but keep significant
+    digits below 1% so a real recovered figure (e.g. jest's 0.2%) never rounds
+    to a contradictory '0%' next to an above-None band."""
+    v = share * 100
+    if 0 < v < 1:
+        return f"{v:.2g}%"
+    return f"{v:.0f}%"
+
+
+def _recovery_facts(ad: dict) -> dict | None:
+    """Preformatted display values for the squash-recovery figure (Package D),
+    or None when --pr-data wasn't supplied. One place computes the numbers so the
+    three renderers can't drift."""
+    rec = ad.get("recovery")
+    if not rec:
+        return None
+    cov = rec["coverage"]
+    return {
+        "recovered": rec["newly_attributed"] > 0,
+        "m_pct": _pct(rec["measured_share"]),
+        "r_pct": _pct(rec["recovered_share"]),
+        "r_level": rec["recovered_level"],
+        "newly": rec["newly_attributed"],
+        "matched": rec["squash_matched"],
+        "squash": rec["squash_commits"],
+        "cov": f"{cov * 100:.0f}%" if cov is not None else "n/a",
+        "partial": cov is not None and cov < 0.9 and rec["squash_commits"] > 0,
+        "tools": ", ".join(rec["recovered_tools"]),
+    }
+
+
+def _recovery_text(ad: dict) -> str | None:
+    """Plain-text dual figure — recovered attribution, or an explicit
+    'nothing to recover' (never implying the measured number was soft)."""
+    f = _recovery_facts(ad)
+    if not f:
+        return None
+    if f["recovered"]:
+        tools = f" ({f['tools']})" if f["tools"] else ""
+        s = (f"recovered {f['r_level']} {f['r_pct']} from PR data — "
+             f"+{f['newly']} squash commit(s) re-attributed{tools}; "
+             f"measured {f['m_pct']} · {f['matched']}/{f['squash']} matched · coverage {f['cov']}")
+    else:
+        s = (f"PR data checked — no dropped AI attribution; measured {f['m_pct']} holds "
+             f"({f['matched']}/{f['squash']} squash commits matched)")
+    if f["partial"]:
+        s += " — partial export, so the recovered figure is itself a lower bound"
+    return s
+
+
+def _recovery_recipe(ad: dict) -> list[str] | None:
+    """The 2-step self-advertising recipe, shown only when a squash workflow is
+    suspected AND no --pr-data was given — the discovery mechanism that teaches
+    the feature exactly when it's relevant. Returns (export, rerun) lines."""
+    if ad.get("recovery") is not None or not ad.get("squash_suspected"):
+        return None
+    return [f"{prdata.EXPORT_COMMAND} > pr.json", "then re-run with --pr-data pr.json"]
 
 
 # AI Adoption has no letter grade, but the same green/yellow/red intent
@@ -523,8 +592,15 @@ def render_impact(result: dict, *, color: bool = False) -> str:
     adoption_label = ansi.bold(f"{'AI Adoption':<{_LW}}", color)
     adoption_val = _adoption_color(
         f"{ad['level']:<11} {ad['ai_coauthor_share'] * 100:.0f}%", ad["level"], color)
-    floor_flag = ansi.warn("  ! floor (squash)", color) if sq else ""
-    L.append(f"  {adoption_label}{adoption_val}{tool}{floor_flag}")
+    rf = _recovery_facts(ad)
+    if rf and rf["recovered"]:
+        head_suffix = "  " + _adoption_color(
+            f"→ {rf['r_level']} {rf['r_pct']} recovered", rf["r_level"], color)
+    elif sq:
+        head_suffix = ansi.warn("  ? squash — may undercount", color)
+    else:
+        head_suffix = ""
+    L.append(f"  {adoption_label}{adoption_val}{tool}{head_suffix}")
 
     dh_label = ansi.bold(f"{'Delivery Health':<{_LW}}", color)
     if dh["status"] == "scored":
@@ -551,6 +627,14 @@ def render_impact(result: dict, *, color: bool = False) -> str:
                  f"({'auto' if ad['adoption_auto_detected'] else 'override'})")
     if sq:
         L.append(f"   ! {sq}")
+    rtext = _recovery_text(ad)
+    if rtext:
+        L.append(f"   ↑ {rtext}")
+    recipe = _recovery_recipe(ad)
+    if recipe:
+        L.append("   recover squash-dropped attribution (zero network — you run the export):")
+        L.append(f"     {recipe[0]}")
+        L.append(f"     {recipe[1]}")
     # Feature C: team-level breadth — aggregate only, with the non-goal line.
     br = ad.get("breadth") or {}
     if br.get("status") == "scored":
@@ -737,12 +821,20 @@ def render_impact_markdown(result: dict) -> str:
     if an.get("ai_agent_commits"):
         _parts.append(f"{an['ai_agent_commits']} AI-agent commits counted as AI")
     excl = f" *({'; '.join(_parts)})*" if _parts else ""
+    _sq = _squash_caveat(ad)
+    _rf = _recovery_facts(ad)
+    if _rf and _rf["recovered"]:
+        adopt_suffix = f" → {_rf['r_level']} {_rf['r_pct']} recovered"
+    elif _sq:
+        adopt_suffix = " ⚠"
+    else:
+        adopt_suffix = ""
     L = [f"# ShipSignal — AI impact: {result['repo']}", "",
          f"**{w['first_commit']} → {w['last_commit']} · {w['weeks']} weeks · "
          f"{ad['total_commits']} dev commits**{excl}", "",
          "| | Result | |", "|---|---|---|",
          f"| **AI Adoption** | {ad['level']} · {ad['ai_coauthor_share'] * 100:.0f}%"
-         f"{' ⚠' if ad.get('squash_suspected') else ''} | {tools} |",
+         f"{adopt_suffix} | {tools} |",
          f"| **Delivery Health** | {health_cell} | general eng norms, not AI-attributed |",
          f"| **Readiness** | {ready_cell} | static repo state |", ""]
 
@@ -753,10 +845,16 @@ def render_impact_markdown(result: dict) -> str:
     L += ["## AI adoption (direct, in-repo signal)", "",
           f"- **{ad['level']} — {ad['ai_coauthor_share'] * 100:.1f}%** "
           f"({ad['ai_commits']}/{ad['total_commits']} commits), a **lower bound** "
-          "(squash-merges drop trailers)."]
-    _sq = _squash_caveat(ad)
+          "(some squash/merge pipelines strip trailers; GitHub-native squash keeps them)."]
     if _sq:
         L.append(f"- ⚠ **{_sq[:1].upper() + _sq[1:]}.**")
+    _rtext = _recovery_text(ad)
+    if _rtext:
+        L.append(f"- **Recovery:** {_rtext}.")
+    _recipe = _recovery_recipe(ad)
+    if _recipe:
+        L.append("- Recover squash-dropped attribution (zero network — you run the export):  \n"
+                 f"  ```\n  {_recipe[0]}\n  # {_recipe[1]}\n  ```")
     if ad.get("adoption_date"):
         L.append(f"- Adoption date: `{ad['adoption_date']}` "
                  f"({'auto-detected' if ad['adoption_auto_detected'] else 'override'})")
@@ -1010,11 +1108,14 @@ def render_impact_html(result: dict) -> str:
     # --- three headline cards ---
     tools = (", ".join(f"{k} {v}" for k, v in ad["per_tool"].items())
              if ad.get("per_tool") else "no AI trailers")
+    _rf = _recovery_facts(ad)
+    recovered_chip = (f" · → {_esc(_rf['r_level'])} {_rf['r_pct']} recovered"
+                      if _rf and _rf["recovered"] else "")
     cards = (f"<div class='card' style='border-top:3px solid #4477dd'>"
              f"<div class='clabel'>{_tip('AI Adoption', 'ai_adoption')}</div>"
              f"<div class='cval'>{ad['level']}<span class='pct'>{pct:.0f}%</span></div>"
              f"<div class='csub'>{_esc(tools)} · lower bound"
-             f"{' · ⚠ squash' if sq else ''}</div></div>")
+             f"{recovered_chip}{' · ⚠ squash' if sq else ''}</div></div>")
     if dh["status"] == "scored":
         cards += _stat_card("Delivery Health", f"{dh['score']}/100 ", dh["grade"],
                             "general eng norms", key="delivery_health")
@@ -1176,6 +1277,18 @@ def render_impact_html(result: dict) -> str:
         f"<div class='hint' style='color:#b86a2c;margin-top:6px'>⚠ {_esc(sq)}</div>"
         if sq else ""
     )
+    _rtext = _recovery_text(ad)
+    recovery_line = (
+        f"<div class='hint' style='color:#2c7a4b;margin-top:6px'>↑ {_esc(_rtext)}</div>"
+        if _rtext else ""
+    )
+    _recipe = _recovery_recipe(ad)
+    recipe_line = (
+        "<div class='hint' style='margin-top:6px'>Recover squash-dropped attribution "
+        f"(zero network — you run the export):<br><code>{_esc(_recipe[0])}</code><br>"
+        f"<code># {_esc(_recipe[1])}</code></div>"
+        if _recipe else ""
+    )
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>AI impact — {_esc(result['repo'])}</title><style>{_REPORT_CSS}</style></head><body>
@@ -1196,6 +1309,8 @@ def render_impact_html(result: dict) -> str:
   {rate_line}
   <div class="hint" style="margin-top:6px">{_esc(glossary.short('ai_adoption'))}</div>
   {squash_line}
+  {recovery_line}
+  {recipe_line}
 </div>
 
 {health_block}

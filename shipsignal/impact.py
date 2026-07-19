@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from . import gitinfo
+from . import gitinfo, prdata
 from .scoring import grade_for
 
 SCHEMA_VERSION = "impact-0.2"
@@ -771,6 +771,89 @@ def _squash_workflow_suspected(commits: list[Commit], level: str,
 
 
 # ---------------------------------------------------------------------------
+# Squash-merge attribution RECOVERY (Package D) — the counterpart to the caveat
+# above. Calibrated finding: GitHub-native "Squash and merge" PRESERVES
+# co-authors (it aggregates them onto the squash commit), so for most repos the
+# local scan already sees them and nothing is recovered. But some pipelines DROP
+# the trailers — internal-monorepo sync bots (jest), some merge queues, manual
+# local squashes, pre-2019 history; for those the local squash commit's trailer
+# is gone while the PR's own commit records still name the AI co-author.
+#
+# Given a user-exported PR-data file (prdata.py — ZERO network: the user runs the
+# `gh` export, we read the local file), match local squash commits back to PRs by
+# merge-commit SHA (falling back to the `(#NNN)` subject) and re-attribute through
+# the SAME token matcher as local trailers. The recovered figure NEVER replaces
+# the measured one — it renders as a labeled dual figure with coverage, so a
+# stale/partial export reads as low coverage, not a confident number.
+# ---------------------------------------------------------------------------
+_PR_NUM_RE = re.compile(r"\(#(\d+)\)")
+
+
+def _pr_ai_tools(rec: prdata.PRRecord) -> set[str]:
+    """AI tools implicated in a PR's authorship, via the identical trailer-token
+    match used for local commits (see Commit.ai_tools) — recovered co-authors get
+    no special treatment. This does count GitHub's "Copilot Autofix"
+    (github-code-quality[bot]) as Copilot, exactly as a LOCAL scan of the same
+    trailer would; the parity is deliberate — whether autofix bots should count
+    as dev-agent adoption is a registry question, not a recovery one."""
+    tools: set[str] = set()
+    for a in rec.authors:
+        low = a.as_trailer().lower()
+        for key in _AI_ALIAS_KEYS.keys() & _tokens(low):
+            tools.add(_AI_ALIAS_KEYS[key])
+    return tools
+
+
+def _recover_from_pr_data(commits: list[Commit], pr_data: prdata.PRData,
+                          measured_ai: int) -> dict:
+    """Re-attribute squash commits whose trailers were dropped, from exported PR
+    data. Returns the recovery block for the adoption dict — additive only; the
+    caller's measured share/level are never touched."""
+    by_oid = pr_data.by_merge_oid
+    by_num = pr_data.by_number
+    # The at-risk population is commits carrying the squash fingerprint `(#NNN)`.
+    # Coverage is measured against these: an export that misses the analyzed
+    # window shows as low coverage instead of a falsely confident number.
+    squash_commits = [c for c in commits if _SQUASH_SUBJECT_RE.search(c.subject)]
+    squash_matched = 0
+    newly: list[Commit] = []
+    recovered_tools: set[str] = set()
+    for c in commits:
+        rec = by_oid.get(c.sha)
+        if rec is None:  # rebase-merge / mirror-SHA fallback: last (#NNN) in subject
+            nums = _PR_NUM_RE.findall(c.subject)
+            if nums:
+                rec = by_num.get(int(nums[-1]))
+        if rec is None:
+            continue
+        if _SQUASH_SUBJECT_RE.search(c.subject):
+            squash_matched += 1
+        tools = _pr_ai_tools(rec)
+        if tools and not c.ai_authored:  # already-measured commits never double-count
+            newly.append(c)
+            recovered_tools |= tools
+    total = len(commits)
+    recovered_ai = measured_ai + len(newly)
+    measured_share = round(measured_ai / total, 3)
+    recovered_share = round(recovered_ai / total, 3)
+    return {
+        "measured_share": measured_share,
+        "recovered_share": recovered_share,
+        "measured_level": adoption_level(measured_share),
+        "recovered_level": adoption_level(recovered_share),
+        "measured_ai_commits": measured_ai,
+        "recovered_ai_commits": recovered_ai,
+        "newly_attributed": len(newly),
+        "squash_commits": len(squash_commits),
+        "squash_matched": squash_matched,
+        "coverage": round(squash_matched / len(squash_commits), 3) if squash_commits else None,
+        "prs_in_export": len(pr_data.records),
+        "recovered_tools": sorted(recovered_tools),
+        "source_command": prdata.EXPORT_COMMAND,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Delivery HEALTH — a current-state snapshot scored against GENERAL engineering
 # norms. NOT a before/after, NOT AI-attributed. Always available (above a small
 # sample floor), so a scan is never empty.
@@ -1003,6 +1086,7 @@ def compute_impact(
     readiness_score: int | None = None,
     squash_override: bool = False,
     release_tag_pattern: str | None = None,
+    pr_data: prdata.PRData | None = None,
 ) -> dict:
     result: dict = {
         "schema_version": SCHEMA_VERSION,
@@ -1089,11 +1173,17 @@ def compute_impact(
         # Feature C: team-level breadth (aggregate only — see compute_breadth
         # docstring; structurally cannot emit per-person data).
         "breadth": compute_breadth(commits),
-        "note": "Lower bound — squash-merges drop trailers; gh PR data could recover them.",
+        "note": "Lower bound — some squash/merge pipelines strip Co-Authored-By trailers "
+                "(GitHub-native squash preserves them); export PR data with --pr-data to "
+                "recover those.",
         "squash_suspected": squash["suspected"],
         "squash_subject_frac": squash["subject_frac"],
         "squash_source": squash["source"],
     }
+    # Package D: squash-attribution recovery from user-exported PR data (opt-in
+    # via --pr-data). Additive — the measured headline above is untouched.
+    if pr_data is not None:
+        result["adoption"]["recovery"] = _recover_from_pr_data(commits, pr_data, ai_count)
 
     # --- Delivery metrics (general health, NOT causal) ---
     result["metrics"] = {

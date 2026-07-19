@@ -39,7 +39,7 @@ Every impact scan headlines with three numbers that are *always* computed (above
 
 | Number | What it is |
 |---|---|
-| **AI Adoption** | `Co-Authored-By:` trailer share + level (None / Emerging / Established / Pervasive). The one direct, AI-specific signal — reported as a lower bound (squash-merges drop trailers). |
+| **AI Adoption** | `Co-Authored-By:` trailer share + level (None / Emerging / Established / Pervasive). The one direct, AI-specific signal — a lower bound: GitHub-native squash preserves co-authors, but some pipelines (internal-sync bots, some merge queues) strip them, and `--pr-data` recovers those (below). |
 | **Delivery Health** | A 0–100 snapshot scored against general engineering norms — *not* AI-attributed. Combines change-size discipline, test discipline, and (for teams) knowledge distribution. Flags surface real risks (`low test discipline`, `concentration risk`). |
 | **Readiness** | The static-state score (the readiness lens, below). Runs by default; `--no-readiness` to skip. |
 
@@ -48,6 +48,15 @@ A fourth, *conditional* **Before/after AI Enablement** delta appears only when t
 An **Outcomes** block rides along as pure context, never scored: revert-pair count + median time-to-correction, computed from git's own `git revert` format (subject `Revert "..."` + body `This reverts commit <sha>`) plus explicit `Fixes:`/`Reverts:` trailers, matched by sha against the analyzed history — a revert-of-a-revert is just another pair, and unmatched reverts (target outside the window) are disclosed, not hidden. Reports `n/a` below 3 matched pairs. It's commit-scoped, not MTTR — production incidents aren't in git. Alongside it, the change-failure proxy (the fix/revert subject rate) is relabeled honestly: it measures commit-labeling discipline as much as failure rate, so it's forbidden from ever feeding Delivery Health.
 
 A **Release cadence & lead time** block reads the same honesty rules from version tags: tags-per-month + median inter-tag gap (trailing 12 months, falling back to the full tag history when sparse), and lead time (median days from a commit landing to the release tag that shipped it) over every consecutive tag pair — one `git log` call per pair, never per commit. Tags are filtered to release-shaped ones (default `v?N.N[.N]`, overridable per repo via `.shipsignal.toml`'s `release_tag_pattern` for monorepo tags like `pkg@1.2.3`). Reports `n/a` below 3 matched tags — **tags aren't deploys** (a service can deploy without tagging), so an untagged repo is never penalized. With Outcomes and Release cadence both landed, that's the DORA-shaped picture from git history alone, zero integrations: deploy frequency ✓, lead time ✓, change-failure proxy ✓ (context) — time-to-restore ✗, because production incidents simply aren't in git, and saying so honestly beats guessing.
+
+A **squash-attribution recovery** path (`--pr-data`) closes the one honest gap in the adoption number, with **zero network calls**. Most squash merges are fine — GitHub-native "Squash and merge" aggregates co-authors onto the squash commit, so the local scan already sees them. But pipelines that bypass that aggregation (internal-monorepo sync bots, some merge queues, manual local squashes) drop the trailers and undercount AI. You export merged-PR data with one `gh` command; ShipSignal reads the local file:
+
+```bash
+gh pr list --state merged --limit 25 --json number,mergeCommit,mergedAt,commits > pr.json
+shipsignal impact <repo> --pr-data pr.json
+```
+
+It matches each squash commit back to its PR by merge-commit SHA (or the `(#NNN)` subject), re-runs the PR's co-authors through the same AI registry, and shows a **dual figure** — `measured None 0% → recovered Emerging 0.2% · coverage 88%` — never silently replacing the measured number, and disclosing match coverage so a stale export reads as low coverage, not false confidence. ([A real run on jest](examples/jest-recovery.md) — whose Meta-sync pipeline strips trailers — recovers **9 hidden AI commits** across Claude / Cursor / Copilot / Cody that a local scan reports as 0%.) On big repos `--limit 1000` in one call trips GitHub's GraphQL node ceiling — export in chunks of ~25. When a squash workflow is detected and you *haven't* supplied `--pr-data`, the report prints this recipe itself.
 
 Calibrated across crown (Pervasive · 55/F · 83/B — flags a real test gap), chalk (None · 77/C · 80/B — flags maintainer concentration), vitest (Emerging · 97/A · 97/A — clean). Every delivery number carries an attribution caveat: it measures general delivery health, never *proves* AI caused a change.
 
