@@ -42,7 +42,7 @@ jobs:
       - name: Ruff
         run: |
           pip install ruff
-          ruff check shipsignal
+          ruff check .
 
   action:
     # Dogfood the composite Action end-to-end (installs the published shipsignal,

@@ -6,14 +6,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from shipsignal import scanner
-from shipsignal.modules import _parse_pnpm_packages, _code_dirs, AGENT_BASENAMES, is_agent_file
+from shipsignal import gitinfo, report, scanner
 from shipsignal.detectors import (
-    _drifted, _drift_grade, _skip_link, _agent_usefulness, _best_usefulness, _ref_paths,
+    _agent_usefulness,
+    _best_usefulness,
+    _drift_grade,
+    _drifted,
+    _ref_paths,
+    _skip_link,
 )
-from shipsignal.scoring import score_scan, grade_for
-from shipsignal.setupcheck import _has_arch_doc, ARCH_MODULE_THRESHOLD, detect_setup
-from shipsignal import gitinfo, report
+from shipsignal.modules import AGENT_BASENAMES, _parse_pnpm_packages, is_agent_file
+from shipsignal.scoring import grade_for, score_scan
+from shipsignal.setupcheck import ARCH_MODULE_THRESHOLD, _has_arch_doc, detect_setup
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -420,7 +424,8 @@ def _git_init_repo(d: Path):
 
 def _git_commit(d: Path, env: dict, message: str, date: str):
     """Commit all changes with a fixed author + commit date (YYYY-MM-DD)."""
-    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": os.environ.get("PATH", "")}
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date,
+         "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     p = subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message],
                        cwd=d, env=e, capture_output=True, text=True)

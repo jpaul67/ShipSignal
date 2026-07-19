@@ -5,9 +5,9 @@ from pathlib import Path
 
 from shipsignal import impact
 from shipsignal.impact import (
-    Commit,
-    MIN_CONTRIBUTORS_FOR_BREADTH,
     _BREADTH_ALLOWED_KEYS,
+    MIN_CONTRIBUTORS_FOR_BREADTH,
+    Commit,
     adoption_level,
     assess_confidence,
     baseline_gate,
@@ -157,8 +157,7 @@ class TestAdoptionDetection(unittest.TestCase):
 
     def test_sustained_window_required(self):
         # A single high-AI week doesn't trip adoption — need 2 sustained.
-        commits = self._series(1, 1.0) + self._series(3, 0.0)
-        # Re-stitch with sequential weeks
+        # Build 4 sequential weeks: week 0 high-AI, weeks 1-3 none.
         all_c = []
         for w in range(4):
             day = date(2026, 1, 5) + timedelta(weeks=w)
@@ -319,7 +318,8 @@ class TestDeliveryHealth(unittest.TestCase):
         m = {
             "change_shape": {"median_lines": 15, "large_change_rate": 0.02, "median_files": 2},
             "quality": {"fix_rate": 0.15, "test_to_code_ratio": 0.6},
-            "people": {"solo": False, "top_author_share": 0.25, "bus_factor": 4, "contributors": 20},
+            "people": {"solo": False, "top_author_share": 0.25, "bus_factor": 4,
+                       "contributors": 20},
             "flow": {"commits_per_week": 20, "active_day_ratio": 0.7},
         }
         dh = delivery_health(commits, m)
@@ -331,7 +331,8 @@ class TestDeliveryHealth(unittest.TestCase):
         m = {
             "change_shape": {"median_lines": 10, "large_change_rate": 0.0, "median_files": 1},
             "quality": {"fix_rate": 0.065, "test_to_code_ratio": 0.3},
-            "people": {"solo": False, "top_author_share": 0.545, "bus_factor": 1, "contributors": 71},
+            "people": {"solo": False, "top_author_share": 0.545, "bus_factor": 1,
+                       "contributors": 71},
             "flow": {"commits_per_week": 1, "active_day_ratio": 0.05},
         }
         dh = delivery_health(commits, m)

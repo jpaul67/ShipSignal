@@ -93,7 +93,8 @@ def _git_init(d: Path):
 
 
 def _git_commit(d: Path, env: dict, msg: str, date: str):
-    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date, "PATH": os.environ.get("PATH", "")}
+    e = {**env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date,
+         "PATH": os.environ.get("PATH", "")}
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     subprocess.run(["git", "commit", "-q", "-m", msg], cwd=d, check=True, env=e)
 
@@ -274,7 +275,7 @@ class TestGroupedRenderer(unittest.TestCase):
         areas = [b["area"] for b in blocks]
         # Order must follow AREA_ORDER even though findings came in mixed order.
         from shipsignal.detectors import AREA_ORDER
-        for actual, expected in zip(areas, AREA_ORDER):
+        for actual, expected in zip(areas, AREA_ORDER, strict=False):
             if actual == expected:
                 continue
             self.fail(f"blocks not in fixed order: got {areas}")
