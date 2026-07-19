@@ -177,6 +177,22 @@ def commits_between_tags(root: Path, t1: str, t2: str) -> list[int]:
     return times
 
 
+def blame_incremental(root: Path, path: str, timeout: int = 120) -> str | None:
+    """Raw ``git blame --incremental -w --no-abbrev`` stdout for ``path``, or None.
+
+    The ``--incremental`` form is the ONLY permitted blame shape here: unlike
+    default ``git blame`` it emits block headers + metadata only and NEVER carries
+    source-line content, so a parser cannot accidentally read file contents.
+    Returns None on failure or empty output (e.g. untracked or binary paths).
+    """
+    out = _run(
+        ["git", "blame", "--incremental", "-w", "--no-abbrev", "--", path],
+        root,
+        timeout=timeout,
+    )
+    return out if out and out.strip() else None
+
+
 def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
     """Clone a repo for scanning. Always full history (never ``--depth``: freshness,
     adoption detection, and the before/after delta all need the whole commit graph).
