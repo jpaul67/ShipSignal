@@ -46,8 +46,33 @@ incidents aren't in git). Calibrated against crown/chalk/vitest before merge.
 **v0.9.0**: tagged, pushed, PyPI publish verified live — a fresh-venv install from PyPI plus a
 real scan confirmed both new blocks render correctly.
 
-**Not started: Trains 4–6** (Packages D, L, I, F — see the table below). Pick up Train 4
-(Package D) next.
+**Status (2026-07-18): Train 4 (Package D) and v0.10.0 SHIPPED.** `--pr-data` on `impact`/`report`
+recovers AI `Co-Authored-By` attribution that a non-native squash/merge pipeline dropped, with
+**zero network calls** — the user exports merged-PR data with one `gh` command and ShipSignal reads
+the local file (new module [shipsignal/prdata.py](shipsignal/prdata.py), pure parsing, guarded by an
+import-scan test asserting no `urllib`/`http`/`socket`). Squash commits match PRs by merge-commit SHA
+(or the `(#NNN)` subject); recovered co-authors run through the same registry matcher as local
+trailers; the result renders as a measured-vs-recovered **dual figure with coverage** that never
+replaces the measured number, plus a self-advertising export recipe when a squash workflow is detected
+without `--pr-data`. **Premise corrected during recipe pinning:** GitHub-native "Squash and merge"
+*preserves* co-authors (it aggregates them onto the squash commit), so a squash workflow is NOT
+automatically an adoption floor — calibrated across vite, prettier, cal.com, pydantic, electron, react
+(all retain) vs jest (Meta internal-sync, drops). The caveat, JSON `note`, and glossary copy were
+reworded to say adoption is undercounted *only if* the pipeline strips trailers. Validated end-to-end
+on jest (7,248 commits): measured None 0% → recovered Emerging 0.2%, +9 hidden AI commits across
+Claude/Cursor/Copilot/Cody at 88% coverage, committed as
+[examples/jest-recovery.*](examples/jest-recovery.md) (the real run also caught a sub-1% display-rounding
+bug, now fixed + regression-tested). Recipe gotcha: `--limit 1000` in one call trips GitHub's GraphQL
+node ceiling — export in chunks of ~25. No `action.yml` change, so no `v1` retarget.
+
+**v0.10.0** (deliberately NOT v1.0.0 — the calibration showed recovery is niche: most repos use
+GitHub-native squash and need nothing, so this is a strong minor, not the 1.0 statement): merged via
+[PR #6](https://github.com/jpaul67/ShipSignal/pull/6), tagged, pushed, PyPI publish verified live via a
+fresh-venv install. Package L's hard dependency on D (survival consumes D's recovered attribution) is
+now cleared.
+
+**Not started: Trains 5–6** (Packages L, I, F — see the table below). Pick up Train 5
+(Package L) next.
 
 ## Read-first for every agent (non-negotiable repo rules)
 
