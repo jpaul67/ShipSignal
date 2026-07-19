@@ -4,7 +4,6 @@ from datetime import date, timedelta
 
 from shipsignal.impact import Commit
 from shipsignal.timeline import (
-    MIN_TRAJECTORY_COMMITS,
     _choose_period_days,
     build_trajectory,
 )

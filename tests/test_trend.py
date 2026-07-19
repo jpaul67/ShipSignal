@@ -1,6 +1,5 @@
 """Trend / Visual Snapshot Viewer tests (Feature S2)."""
 import html.parser
-import json
 import tempfile
 import unittest
 from pathlib import Path

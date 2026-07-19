@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from shipsignal import scanner, snapshot
+from shipsignal import scanner
 from shipsignal.impact import _BREADTH_ALLOWED_KEYS, compute_impact
 from shipsignal.snapshot import (
     SNAPSHOT_SCHEMA_VERSION,
