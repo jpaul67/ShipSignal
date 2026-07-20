@@ -1,11 +1,23 @@
-"""Surviving-lines-by-sha tests (Package L, slice 1)."""
+"""Surviving-lines-by-sha tests (Package L, slices 1 and 2)."""
 import os
 import subprocess
 import tempfile
 import unittest
+from collections import namedtuple
+from datetime import date
 from pathlib import Path
 
-from shipsignal.survival import parse_incremental_blame, surviving_lines_by_sha
+from shipsignal.survival import (
+    MIN_GROUP_COMMITS,
+    MIN_GROUP_LINES,
+    MIN_SURVIVAL_AGE_DAYS,
+    compute_survival,
+    matched_survival,
+    parse_incremental_blame,
+    surviving_lines_by_sha,
+)
+
+Commit = namedtuple("Commit", ["sha", "date", "lines_added"])
 
 
 def _git_init(d: Path) -> dict:
@@ -120,6 +132,191 @@ class TestSurvivingLinesByShaSmoke(unittest.TestCase):
                 "README.md", "x\n")
         result = surviving_lines_by_sha(self.root, ["README.md"])
         self.assertEqual(result, {})
+
+
+# --- Slice 2: age-matched survival -------------------------------------------
+# Synthetic shas for the pure aggregator tests (no real git needed).
+AI1 = "a1" * 20
+AI2 = "a2" * 20
+OT1 = "b1" * 20
+OT2 = "b2" * 20
+AI3 = "a3" * 20  # AI-only month, high survival (the pooled-flattering one)
+
+
+class TestMatchedSurvivalHappyPath(unittest.TestCase):
+    def test_scored_exact_hand_computed(self):
+        # Two matched months. Hand-compute survival:
+        #   Month 2024-01: AI adds 100, survives 50 -> 0.50
+        #                 other adds 200, survives 80 -> 0.40
+        #   Month 2024-02: AI adds 100, survives 30 -> 0.30
+        #                 other adds 100, survives 60 -> 0.60
+        # Overall AI:    (50+30)/(100+100) = 80/200 = 0.40
+        # Overall other: (80+60)/(200+100) = 140/300 ≈ 0.4666...
+        today = date(2026, 6, 1)
+        adoption = date(2024, 1, 1)
+        commits = [
+            Commit(AI1, date(2024, 1, 10), 100),
+            Commit(OT1, date(2024, 1, 20), 200),
+            Commit(AI2, date(2024, 2, 5), 100),
+            Commit(OT2, date(2024, 2, 25), 100),
+        ]
+        surviving = {AI1: 50, OT1: 80, AI2: 30, OT2: 60}
+        res = matched_survival(commits, surviving, {AI1, AI2, AI3}, adoption, today,
+                               min_group_commits=1, min_group_lines=1)
+        self.assertEqual(res["status"], "scored")
+        self.assertAlmostEqual(res["ai_survival"], 0.40)
+        self.assertAlmostEqual(res["other_survival"], 140 / 300)
+        self.assertEqual(len(res["buckets"]), 2)
+        self.assertEqual(res["buckets"][0]["month"], "2024-01")
+        self.assertEqual(res["buckets"][1]["month"], "2024-02")
+        self.assertAlmostEqual(res["buckets"][0]["ai_survival"], 0.50)
+        self.assertAlmostEqual(res["buckets"][0]["other_survival"], 0.40)
+        self.assertEqual(res["age_floor_days"], MIN_SURVIVAL_AGE_DAYS)
+
+
+class TestAgeMatchingNotPooled(unittest.TestCase):
+    """THE load-bearing test: pooled != age-matched, and reported == matched."""
+
+    def test_age_matching_excludes_ai_only_month_pool_vs_matched(self):
+        # Two matched months + one AI-only month with high survival.
+        # The AI-only month would flatter AI under a naive pooled comparison
+        # but must be EXCLUDED by age-matching.
+        today = date(2026, 6, 1)
+        adoption = date(2024, 1, 1)
+        commits = [
+            # Matched month 2024-01
+            Commit(AI1, date(2024, 1, 10), 100),
+            Commit(OT1, date(2024, 1, 20), 100),
+            # Matched month 2024-02
+            Commit(AI2, date(2024, 2, 10), 100),
+            Commit(OT2, date(2024, 2, 20), 100),
+            # AI-only month 2024-03 — high survival, flatters AI if pooled
+            Commit(AI3, date(2024, 3, 10), 100),
+        ]
+        surviving = {AI1: 40, OT1: 80, AI2: 40, OT2: 80, AI3: 95}
+        ai_shas = {AI1, AI2, AI3}
+
+        res = matched_survival(commits, surviving, ai_shas, adoption, today,
+                               min_group_commits=1, min_group_lines=1)
+        self.assertEqual(res["status"], "scored")
+
+        # Age-matched AI: (40+40)/(100+100) = 0.40  (AI3 month excluded)
+        matched_ai = (40 + 40) / (100 + 100)
+        # Pooled AI (naive, includes AI-only month): (40+40+95)/(100+100+100)
+        pooled_ai = (40 + 40 + 95) / (100 + 100 + 100)
+
+        self.assertNotEqual(matched_ai, pooled_ai,
+                            "test setup bug: pooled == matched, no divergence")
+        self.assertAlmostEqual(res["ai_survival"], matched_ai)
+        self.assertNotAlmostEqual(res["ai_survival"], pooled_ai)
+        # The AI-only month must not appear as a bucket.
+        months = [b["month"] for b in res["buckets"]]
+        self.assertNotIn("2024-03", months)
+        self.assertEqual(set(months), {"2024-01", "2024-02"})
+
+
+class TestMatchedSurvivalFloors(unittest.TestCase):
+    def test_withheld_below_min_group_commits(self):
+        today = date(2026, 6, 1)
+        adoption = date(2024, 1, 1)
+        # 5 AI + 5 other commits in one matched month — below MIN_GROUP_COMMITS.
+        commits = []
+        surviving = {}
+        for i in range(5):
+            sha_ai = f"{i:039x}1"  # 40 hex chars
+            sha_ot = f"{i:039x}2"
+            commits.append(Commit(sha_ai, date(2024, 1, 10 + i), 100))
+            commits.append(Commit(sha_ot, date(2024, 1, 15 + i), 100))
+            surviving[sha_ai] = 50
+            surviving[sha_ot] = 50
+        ai_shas = {c.sha for c in commits if c.sha.endswith("1")}
+        res = matched_survival(commits, surviving, ai_shas, adoption, today)
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("min_group_commits", res["reason"])
+        self.assertEqual(res["coverage"]["ai_commits"], 5)
+        self.assertEqual(res["coverage"]["other_commits"], 5)
+
+    def test_withheld_below_min_group_lines(self):
+        today = date(2026, 6, 1)
+        adoption = date(2024, 1, 1)
+        # Plenty of commits but each adds only 1 line -> below MIN_GROUP_LINES.
+        commits = []
+        surviving = {}
+        for i in range(MIN_GROUP_COMMITS + 5):
+            sha_ai = f"{i:039x}1"
+            sha_ot = f"{i:039x}2"
+            commits.append(Commit(sha_ai, date(2024, 1, 1), 1))
+            commits.append(Commit(sha_ot, date(2024, 1, 1), 1))
+            surviving[sha_ai] = 0
+            surviving[sha_ot] = 0
+        ai_shas = {c.sha for c in commits if c.sha.endswith("1")}
+        res = matched_survival(commits, surviving, ai_shas, adoption, today)
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("min_group_lines", res["reason"])
+        # Each group's added lines = commit count * 1, below MIN_GROUP_LINES.
+        self.assertLess(res["coverage"]["ai_lines"], MIN_GROUP_LINES)
+
+    def test_withheld_no_matched_months(self):
+        # AI-only and other-only in DIFFERENT months -> no matched month.
+        today = date(2026, 6, 1)
+        adoption = date(2024, 1, 1)
+        commits = [
+            Commit(AI1, date(2024, 1, 10), 100),
+            Commit(OT1, date(2024, 2, 10), 100),
+        ]
+        res = matched_survival(commits, {AI1: 50, OT1: 50}, {AI1}, adoption, today,
+                               min_group_commits=1, min_group_lines=1)
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("matched months", res["reason"])
+
+
+class TestComputeSurvivalSmoke(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.env = _git_init(self.root)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_two_commit_repo_withholds_under_default_floors(self):
+        # One AI commit + one human commit, same month, > 90 days old.
+        ai_sha = _commit(self.root, self.env, "ai", "2025-01-01 12:00:00",
+                         "app.py", "a\nb\nc\n")
+        # Replace app.py entirely under a human sha so both have surviving lines.
+        human_sha = _commit(self.root, self.env, "human", "2025-01-02 12:00:00",
+                            "app.py", "x\ny\nz\nw\n")
+        commits = [
+            Commit(ai_sha, date(2025, 1, 1), 3),
+            Commit(human_sha, date(2025, 1, 2), 4),
+        ]
+        res = compute_survival(self.root, commits, {ai_sha},
+                               adoption_dt=date(2025, 1, 1),
+                               today=date(2026, 6, 1))
+        # Single month with 1 AI + 1 other commit -> below MIN_GROUP_COMMITS.
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("sampled", res)
+        self.assertEqual(res["files_blamed"], 1)
+        self.assertEqual(res["files_total"], 1)
+        self.assertFalse(res["sampled"])
+
+    def test_sampling_determinism_low_max_files(self):
+        # Two source files; cap at 1 -> sampled, and two runs agree.
+        _commit(self.root, self.env, "c1", "2025-01-01 12:00:00",
+                "a.py", "a\nb\n")
+        sha2 = _commit(self.root, self.env, "c2", "2025-01-02 12:00:00",
+                       "b.py", "x\ny\nz\n")
+        commits = [Commit(sha2, date(2025, 1, 2), 3)]
+        r1 = compute_survival(self.root, commits, {sha2},
+                              adoption_dt=date(2025, 1, 1),
+                              today=date(2026, 6, 1), max_files=1)
+        r2 = compute_survival(self.root, commits, {sha2},
+                              adoption_dt=date(2025, 1, 1),
+                              today=date(2026, 6, 1), max_files=1)
+        self.assertEqual(r1, r2)
+        self.assertTrue(r1["sampled"])
+        self.assertEqual(r1["files_blamed"], 1)
+        self.assertEqual(r1["files_total"], 2)
 
 
 if __name__ == "__main__":
