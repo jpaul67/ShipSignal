@@ -103,6 +103,19 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "without tagging, so an untagged repo is never penalized, only "
                "shown n/a.",
     },
+    "survival": {
+        "short": "Of the lines AI-authored commits added, how many still survive in "
+                 "today's code, compared with lines from non-AI commits of the same age "
+                 "— a durability signal, age-matched so younger AI lines aren't flattered. "
+                 "Always context, never scored.",
+        "tip": "Metadata-only `git blame --incremental` (never reads source content): "
+               "surviving lines per commit, split AI vs other by the same trailer registry "
+               "as adoption. Age-matched — a calendar month counts only if it has BOTH an "
+               "AI and a non-AI eligible commit (≥90 days old), so the groups are compared "
+               "at equal maturity. Withheld below the coverage floors (matched months, ≥20 "
+               "commits and ≥500 added lines per group). Blame is capped/sampled on large "
+               "repos (disclosed). Never part of any score.",
+    },
     # --- conditional / over-time ---
     "before_after": {
         "short": "When a clean pre-AI baseline exists, how delivery metrics shifted "

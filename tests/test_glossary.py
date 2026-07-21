@@ -11,6 +11,7 @@ REPO = Path(__file__).resolve().parent.parent
 # Every key a renderer looks up must exist in the glossary.
 REQUIRED_KEYS = [
     "ai_adoption", "delivery_health", "readiness", "before_after", "trajectory",
+    "survival",
     "change_size_discipline", "test_discipline", "knowledge_distribution",
     "entry_point", "agent_instructions", "module_coverage", "setup_tooling",
     "doc_integrity", "doc_freshness",
