@@ -4,9 +4,10 @@ import subprocess
 import tempfile
 import unittest
 from collections import namedtuple
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
+from shipsignal import config, impact, prdata
 from shipsignal.survival import (
     MIN_GROUP_COMMITS,
     MIN_GROUP_LINES,
@@ -30,9 +31,12 @@ def _git_init(d: Path) -> dict:
     return env
 
 
-def _commit(d: Path, env: dict, msg: str, date_str: str, fname: str, content: str) -> str:
+def _commit(d: Path, env: dict, msg: str, date_str: str, fname: str, content: str,
+            *, ai: bool = False) -> str:
     (d / fname).write_text(content)
     e = {**env, "GIT_AUTHOR_DATE": date_str, "GIT_COMMITTER_DATE": date_str}
+    if ai:
+        msg = f"{msg}\n\nCo-authored-by: Copilot <copilot@github.com>"
     subprocess.run(["git", "add", "-A"], cwd=d, check=True, env=e)
     subprocess.run(["git", "commit", "-q", "-m", msg], cwd=d, check=True, env=e)
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True, env=e,
@@ -317,6 +321,89 @@ class TestComputeSurvivalSmoke(unittest.TestCase):
         self.assertTrue(r1["sampled"])
         self.assertEqual(r1["files_blamed"], 1)
         self.assertEqual(r1["files_total"], 2)
+
+
+# --- Slice 3: wiring into impact / CLI / config --------------------------------
+class TestImpactSurvivalWiring(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.env = _git_init(self.root)
+        # Two sustained weeks each with 50% AI commits so adoption is detected.
+        base = date(2025, 1, 6)  # Monday
+        _commit(self.root, self.env, "w1 human", f"{base} 12:00:00",
+                "app.py", "x\n", ai=False)
+        _commit(self.root, self.env, "w1 ai", f"{base + timedelta(days=1)} 12:00:00",
+                "app.py", "x\ny\n", ai=True)
+        _commit(self.root, self.env, "w2 human", f"{base + timedelta(days=7)} 12:00:00",
+                "app.py", "x\ny\nz\n", ai=False)
+        _commit(self.root, self.env, "w2 ai", f"{base + timedelta(days=8)} 12:00:00",
+                "app.py", "x\ny\nz\nw\n", ai=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_survival_off_does_not_add_key(self):
+        result = impact.compute_impact(self.root, survival=False)
+        self.assertNotIn("error", result)
+        self.assertNotIn("survival", result)
+
+    def test_survival_on_adds_status_block(self):
+        result = impact.compute_impact(self.root, survival=True)
+        self.assertIn("survival", result)
+        self.assertIn("status", result["survival"])
+
+
+class TestRecoverFromPRDataNewlyShas(unittest.TestCase):
+    """The returned recovery block must surface the recovered shas so survival
+    can include them in the AI set."""
+
+    def test_newly_shas_surfaces_recovered_sha(self):
+        sha = "abc123" + "0" * 34
+        commit = impact.Commit(
+            sha=sha,
+            date=date(2025, 1, 1),
+            email="human@example.com",
+            subject="feat: add thing (#123)",
+            trailers=[],
+            files=["app.py"],
+            lines_added=10,
+            lines_deleted=0,
+            body="",
+        )
+        self.assertFalse(commit.ai_authored)
+        pr_rec = prdata.PRRecord(
+            number=123,
+            merge_oid=sha,
+            merged_at=date(2025, 1, 1),
+            authors=[prdata.PRAuthor(name="Copilot", email="copilot@github.com")],
+        )
+        recovered = impact._recover_from_pr_data(
+            [commit], prdata.PRData([pr_rec]), measured_ai=0
+        )
+        self.assertIn("newly_shas", recovered)
+        self.assertEqual(recovered["newly_shas"], [sha])
+        self.assertEqual(recovered["newly_attributed"], 1)
+
+
+class TestConfigSurvival(unittest.TestCase):
+    def test_bool_survival_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".shipsignal.toml").write_text("[impact]\nsurvival = true\n", encoding="utf-8")
+            cfg, warnings = config.load_config(root)
+            self.assertEqual(cfg.impact.survival, True)
+            self.assertEqual(warnings, [])
+
+    def test_non_bool_survival_warns_and_keeps_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".shipsignal.toml").write_text(
+                '[impact]\nsurvival = "yes"\n', encoding="utf-8"
+            )
+            cfg, warnings = config.load_config(root)
+            self.assertIsNone(cfg.impact.survival)
+            self.assertTrue(any("survival" in w for w in warnings))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ Schema (all optional):
     extra_ai_aliases = { "acmebot" = "Acme internal" }  # merged into AI_TOOL_ALIASES at runtime
     squash = true
     release_tag_pattern = "^pkg@\\\\d+\\\\.\\\\d+\\\\.\\\\d+$"  # override default v?N.N[.N]
+    survival = true
     [readiness]
     fail_under = 80
     exclude_modules = ["vendor/legacy"]
@@ -38,6 +39,7 @@ class ImpactConfig:
     extra_ai_aliases: dict[str, str] = field(default_factory=dict)
     squash: bool | None = None
     release_tag_pattern: str | None = None
+    survival: bool | None = None
 
 
 @dataclass
@@ -108,7 +110,9 @@ _SCHEMA: dict[str, dict[str, tuple]] = {
         "extra_ai_aliases": (_is_str_str_dict, "a table of string to string",
                              lambda cfg, v: setattr(cfg.impact, "extra_ai_aliases", dict(v))),
         "squash": (lambda v: isinstance(v, bool), "a bool",
-                  lambda cfg, v: setattr(cfg.impact, "squash", v)),
+                   lambda cfg, v: setattr(cfg.impact, "squash", v)),
+        "survival": (lambda v: isinstance(v, bool), "a bool",
+                     lambda cfg, v: setattr(cfg.impact, "survival", v)),
         "release_tag_pattern": (_is_valid_regex, "a valid regex string",
                                 lambda cfg, v: setattr(cfg.impact, "release_tag_pattern", v)),
     },

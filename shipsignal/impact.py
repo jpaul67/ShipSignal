@@ -844,6 +844,7 @@ def _recover_from_pr_data(commits: list[Commit], pr_data: prdata.PRData,
         "measured_ai_commits": measured_ai,
         "recovered_ai_commits": recovered_ai,
         "newly_attributed": len(newly),
+        "newly_shas": [c.sha for c in newly],
         "squash_commits": len(squash_commits),
         "squash_matched": squash_matched,
         "coverage": round(squash_matched / len(squash_commits), 3) if squash_commits else None,
@@ -1087,6 +1088,7 @@ def compute_impact(
     squash_override: bool = False,
     release_tag_pattern: str | None = None,
     pr_data: prdata.PRData | None = None,
+    survival: bool = False,
 ) -> dict:
     result: dict = {
         "schema_version": SCHEMA_VERSION,
@@ -1184,6 +1186,20 @@ def compute_impact(
     # via --pr-data). Additive — the measured headline above is untouched.
     if pr_data is not None:
         result["adoption"]["recovery"] = _recover_from_pr_data(commits, pr_data, ai_count)
+
+    # --- Package L: AI-vs-other line survival (opt-in via --survival) ---
+    if survival and adoption_dt is not None:
+        # Local import avoids a module-load cycle (survival imports impact).
+        from .survival import compute_survival
+        ai_shas = {c.sha for c in commits if c.ai_authored}
+        if pr_data is not None:
+            ai_shas |= set(result["adoption"]["recovery"].get("newly_shas", []))
+        result["survival"] = compute_survival(root, commits, ai_shas, adoption_dt)
+    elif survival:
+        # Requested but no adoption date to age-match against — disclose, don't invent.
+        result["survival"] = {"status": "withheld",
+                              "reason": "no adoption date detected",
+                              "sampled": False, "files_blamed": 0, "files_total": 0}
 
     # --- Delivery metrics (general health, NOT causal) ---
     result["metrics"] = {
