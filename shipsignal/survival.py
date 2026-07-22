@@ -9,13 +9,21 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from shipsignal.gitinfo import blame_incremental, tracked_files
+from shipsignal.gitinfo import blame_incremental, tracked_files_at_head
 from shipsignal.impact import _CODE_EXTS
 
 # Slice 2 — age-matched survival scoring.
-# Caps and floors (honesty rails #2 and #4):
-MAX_SURVIVAL_FILES = 400
-MAX_SURVIVAL_LINES = 200_000
+# Coverage ceiling (honesty rail #4): a survival rate is only unbiased when EVERY
+# source file is blamed — the surviving-line numerator covers only blamed files while
+# the added-line denominator (from numstat) covers all files, so a partial blame
+# systematically deflates the rate. These are therefore WITHHOLD thresholds, not
+# sampling caps: a repo with more code files than MAX_SURVIVAL_FILES, or whose blame
+# would exceed MAX_SURVIVAL_LINES, is withheld rather than reported as a biased partial
+# rate. ~1500 files / 600k lines keeps a full blame to a few minutes on mid-size repos;
+# bigger repos withhold. Raise deliberately (like the readiness SCORE_CAPS).
+MAX_SURVIVAL_FILES = 1500
+MAX_SURVIVAL_LINES = 600_000
+# Age/eligibility floors (honesty rails #2 and #4):
 MIN_SURVIVAL_AGE_DAYS = 90
 MIN_GROUP_COMMITS = 20
 MIN_GROUP_LINES = 500
@@ -218,29 +226,40 @@ def compute_survival(
 ) -> dict:
     """Blame-driven survival wrapper around :func:`matched_survival`.
 
-    Enumerates tracked source files, applies a deterministic cap (sorted file list,
-    stop after ``max_files`` files or once cumulative surviving lines reach
-    ``max_lines``), blames each kept file, merges into one {sha: surviving} dict,
-    and delegates to :func:`matched_survival`. Sampling disclosure is added to the
-    result regardless of status.
+    Enumerates HEAD's tracked source files, blames each to build one {sha: surviving}
+    dict, and delegates to :func:`matched_survival`. A survival rate is only unbiased
+    when EVERY source file is blamed (the numerator counts surviving lines in blamed
+    files; the denominator counts all lines the commits added), so this does NOT
+    sample-and-report: if the repo has more code files than ``max_files``, or blaming
+    them would exceed ``max_lines``, it WITHHOLDS with disclosure rather than emit a
+    biased partial rate. ``files_blamed`` / ``files_total`` / ``sampled`` are stamped
+    on every result.
     """
     today = today or date.today()
 
     source_files = sorted(
-        p for p in tracked_files(root) if Path(p).suffix.lower() in _CODE_EXTS
+        p for p in tracked_files_at_head(root) if Path(p).suffix.lower() in _CODE_EXTS
     )
     files_total = len(source_files)
+
+    # Honesty guard (rail #4): a survival rate is only unbiased when EVERY source file
+    # is blamed, so if the repo has more code files than we will fully blame, withhold
+    # UP FRONT — skipping the expensive partial blame entirely — rather than ship a
+    # biased sampled number.
+    if files_total > max_files:
+        return {"status": "withheld",
+                "reason": f"too many source files to blame reliably "
+                          f"({files_total} > cap {max_files}); a sampled survival "
+                          f"rate would be biased, so it is withheld",
+                "sampled": True, "files_blamed": 0, "files_total": files_total}
 
     merged: dict[str, int] = {}
     kept = 0
     cumulative = 0
-    sampled = False
+    line_capped = False
     for p in source_files:
-        if kept >= max_files:
-            sampled = True
-            break
         if cumulative >= max_lines:
-            sampled = True
+            line_capped = True
             break
         out = blame_incremental(root, p)
         if not out:
@@ -250,12 +269,27 @@ def compute_survival(
             merged[sha] = merged.get(sha, 0) + n
         cumulative += sum(per_file.values())
         kept += 1
-    # Cap tripped only if we stopped before consuming every source file.
-    if kept < files_total and (kept >= max_files or cumulative >= max_lines):
-        sampled = True
 
+    # Same rail: if the line budget tripped before every file was blamed, coverage is
+    # partial, so withhold rather than report a biased rate.
+    if line_capped:
+        return {"status": "withheld",
+                "reason": f"source exceeds the blame line budget ({cumulative} >= "
+                          f"{max_lines} lines before all {files_total} files were "
+                          f"blamed); withheld rather than report a biased partial rate",
+                "sampled": True, "files_blamed": kept, "files_total": files_total}
+
+    # Nothing blamed at all (every file binary/unreadable, or no code files) — the
+    # comparison would be a meaningless 0%/0%, so withhold.
+    if kept == 0:
+        return {"status": "withheld",
+                "reason": "no source files could be blamed "
+                          "(incomplete checkout, partial clone, or no code files)",
+                "sampled": False, "files_blamed": 0, "files_total": files_total}
+
+    # Every source file was blamed in full — an unbiased comparison.
     result = matched_survival(commits, merged, ai_shas, adoption_dt, today)
-    result["sampled"] = sampled
+    result["sampled"] = False
     result["files_blamed"] = kept
     result["files_total"] = files_total
     return result

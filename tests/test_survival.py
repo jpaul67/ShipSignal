@@ -304,23 +304,41 @@ class TestComputeSurvivalSmoke(unittest.TestCase):
         self.assertEqual(res["files_total"], 1)
         self.assertFalse(res["sampled"])
 
-    def test_sampling_determinism_low_max_files(self):
-        # Two source files; cap at 1 -> sampled, and two runs agree.
+    def test_over_file_cap_withholds_not_partial_scored(self):
+        # More source files than the cap -> a partial blame would bias the rate, so
+        # survival WITHHOLDS up front (never a sampled number), deterministically.
         _commit(self.root, self.env, "c1", "2025-01-01 12:00:00",
                 "a.py", "a\nb\n")
         sha2 = _commit(self.root, self.env, "c2", "2025-01-02 12:00:00",
                        "b.py", "x\ny\nz\n")
         commits = [Commit(sha2, date(2025, 1, 2), 3)]
-        r1 = compute_survival(self.root, commits, {sha2},
-                              adoption_dt=date(2025, 1, 1),
-                              today=date(2026, 6, 1), max_files=1)
-        r2 = compute_survival(self.root, commits, {sha2},
-                              adoption_dt=date(2025, 1, 1),
-                              today=date(2026, 6, 1), max_files=1)
-        self.assertEqual(r1, r2)
-        self.assertTrue(r1["sampled"])
-        self.assertEqual(r1["files_blamed"], 1)
-        self.assertEqual(r1["files_total"], 2)
+        res = compute_survival(self.root, commits, {sha2},
+                               adoption_dt=date(2025, 1, 1),
+                               today=date(2026, 6, 1), max_files=1)
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("too many source files", res["reason"])
+        self.assertEqual(res["files_blamed"], 0)
+        self.assertEqual(res["files_total"], 2)
+        self.assertTrue(res["sampled"])
+
+    def test_no_code_files_withholds_not_zero_scored(self):
+        # A repo with commits but NO code files -> nothing to blame -> must WITHHOLD
+        # (honesty guard), never a fabricated "scored" 0%/0% off zero blame data.
+        ai_sha = _commit(self.root, self.env, "ai", "2025-01-01 12:00:00",
+                         "README.md", "# docs\nmore\n")
+        human_sha = _commit(self.root, self.env, "human", "2025-01-02 12:00:00",
+                            "NOTES.txt", "notes\n")
+        commits = [
+            Commit(ai_sha, date(2025, 1, 1), 2),
+            Commit(human_sha, date(2025, 1, 2), 1),
+        ]
+        res = compute_survival(self.root, commits, {ai_sha},
+                               adoption_dt=date(2025, 1, 1),
+                               today=date(2026, 6, 1))
+        self.assertEqual(res["status"], "withheld")
+        self.assertIn("blamed", res["reason"])
+        self.assertEqual(res["files_blamed"], 0)
+        self.assertEqual(res["files_total"], 0)
 
 
 # --- Slice 3: wiring into impact / CLI / config --------------------------------
