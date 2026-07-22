@@ -9,6 +9,28 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-07-21
+
+### Added
+- **AI line survival** (Package L). A new opt-in Impact block (`--survival` on `impact` and
+  `report`) asks a durability question the adoption number can't: of the lines AI-authored commits
+  added, how many still survive in today's code, versus lines from non-AI commits **of the same
+  age**? Metadata-only (`git blame --incremental` read from HEAD's object store — never reads source
+  content, and robust to an incomplete checkout, e.g. a large repo whose deep paths exceed the
+  Windows path limit), age-matched (a calendar month contributes only when it has BOTH an AI and a
+  non-AI eligible commit ≥90 days old, so younger AI lines aren't flattered against older non-AI
+  ones), a **lower bound** (blame credits moved/refactored lines to the moving commit, so a large
+  refactor reads as death), and **never scored** — pure context. **Honest by construction:** it
+  reports a rate *only* at full blame coverage, and withholds — never samples — above the file cap
+  (1500) or line budget (600k lines), on recent adopters whose commits haven't aged 90 days, and
+  below the matched-month floors (≥20 commits and ≥500 added lines per group). When auto-detection
+  places the adoption window too recently, the withheld block hints at `--adoption-date` to measure
+  from a known adoption point. Off by default (survival-off output is byte-identical); new module
+  `shipsignal/survival.py`, `[impact].survival` config key. Calibrated on real repos — firecrawl AI
+  48.5% / other 41.5%, browser-use AI 9.6% / other 24.2% (full coverage) — which also surfaced and
+  fixed the sampling-bias, incomplete-checkout, and zero-blame failure modes a synthetic test
+  couldn't.
+
 ## [0.10.0] — 2026-07-18
 
 ### Added
