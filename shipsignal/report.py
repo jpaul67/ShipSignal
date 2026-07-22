@@ -734,6 +734,8 @@ def render_impact(result: dict, *, color: bool = False) -> str:
                      + ("  (sampled)" if sv.get("sampled") else ""))
         else:
             L.append(f"   n/a — {sv.get('reason', 'withheld')}")
+        if sv.get("hint"):
+            L.append(f"   → {sv['hint']}")
         L.append("")
 
     # --- Before/after AI Enablement delta (the conditional bonus) ---
@@ -960,6 +962,8 @@ def render_impact_markdown(result: dict) -> str:
                      + (" (sampled)" if sv.get("sampled") else ""))
         else:
             L.append(f"- *n/a — {sv.get('reason', 'withheld')}.*")
+        if sv.get("hint"):
+            L.append(f"- *{sv['hint']}*")
         L += ["", f"_<sub>{glossary.short('survival')}</sub>_", ""]
 
     # Over-time trajectory (always included when there's enough history).
@@ -1265,12 +1269,15 @@ def render_impact_html(result: dict) -> str:
             f"{' (sampled)' if sv.get('sampled') else ''}.</p>"
         )
     elif sv:
+        _svhint = (f"<p class='hint' style='margin-top:6px'>&rarr; {_esc(sv['hint'])}</p>"
+                   if sv.get("hint") else "")
         survival_block = (
             "\n\n"
             f"<h2>{_tip('AI line survival', 'survival')} "
             f"<span class='hint'>age-matched · context, never scored</span></h2>"
             f"<p class='hint'>{_esc(glossary.short('survival'))}</p>"
             f"<div class='withheld'>n/a — {_esc(sv.get('reason', 'withheld'))}.</div>"
+            f"{_svhint}"
         )
     else:
         survival_block = ""

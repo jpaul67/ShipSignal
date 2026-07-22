@@ -32,6 +32,15 @@ _WITHHELD = {"status": "withheld", "reason": "no matched months (test)",
 # against — a withheld dict with NO "coverage" key. The renderers must tolerate it.
 _WITHHELD_NO_COVERAGE = {"status": "withheld", "reason": "no adoption date detected",
                          "sampled": False, "files_blamed": 0, "files_total": 0}
+# A withheld result carrying the calibration UX hint (impact adds this when the repo
+# has AI commits but auto-detection found no measurable window).
+_WITHHELD_HINTED = {"status": "withheld",
+                    "reason": "no matched months (no month has both AI and other "
+                              "eligible commits)",
+                    "hint": "this repo has AI commits but no measurable survival window "
+                            "was found automatically — pass --adoption-date YYYY-MM-DD "
+                            "to measure survival from a known adoption point",
+                    "sampled": False, "files_blamed": 0, "files_total": 900}
 
 
 class TestSurvivalRender(unittest.TestCase):
@@ -71,8 +80,13 @@ class TestSurvivalRender(unittest.TestCase):
             self.assertIn("line survival", out.lower())
             self.assertIn("no adoption date", out.lower())
 
+    def test_withheld_hint_renders_in_all_formats(self):
+        for out in self._all_formats(self._with(_WITHHELD_HINTED)):
+            self.assertIn("line survival", out.lower())
+            self.assertIn("--adoption-date", out)
+
     def test_html_parses_all_states(self):
-        for sv in (_SCORED, _WITHHELD, _WITHHELD_NO_COVERAGE):
+        for sv in (_SCORED, _WITHHELD, _WITHHELD_NO_COVERAGE, _WITHHELD_HINTED):
             html.parser.HTMLParser().feed(report.render_impact_html(self._with(sv)))
 
 

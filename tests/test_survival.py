@@ -371,6 +371,20 @@ class TestImpactSurvivalWiring(unittest.TestCase):
         self.assertIn("survival", result)
         self.assertIn("status", result["survival"])
 
+    def test_withheld_with_ai_commits_hints_adoption_date(self):
+        # Tiny repo -> withheld below the floors, but it HAS AI commits, so the
+        # calibration UX hint should point at --adoption-date.
+        sv = impact.compute_impact(self.root, survival=True)["survival"]
+        self.assertEqual(sv["status"], "withheld")
+        self.assertIn("hint", sv)
+        self.assertIn("--adoption-date", sv["hint"])
+
+    def test_hint_absent_when_adoption_date_overridden(self):
+        # If the user already forced a date, don't tell them to pass one.
+        sv = impact.compute_impact(self.root, survival=True,
+                                   adoption_date_override="2025-01-01")["survival"]
+        self.assertNotIn("hint", sv)
+
 
 class TestRecoverFromPRDataNewlyShas(unittest.TestCase):
     """The returned recovery block must surface the recovered shas so survival

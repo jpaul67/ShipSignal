@@ -112,9 +112,11 @@ GLOSSARY: dict[str, dict[str, str]] = {
                "surviving lines per commit, split AI vs other by the same trailer registry "
                "as adoption. Age-matched — a calendar month counts only if it has BOTH an "
                "AI and a non-AI eligible commit (≥90 days old), so the groups are compared "
-               "at equal maturity. Withheld below the coverage floors (matched months, ≥20 "
-               "commits and ≥500 added lines per group). Blame is capped/sampled on large "
-               "repos (disclosed). Never part of any score.",
+               "at equal maturity. A lower bound: blame credits moved/refactored lines to "
+               "the moving commit, so a large refactor reads as death. Reported only at "
+               "FULL blame coverage — withheld (never sampled) below the floors (matched "
+               "months, ≥20 commits and ≥500 added lines per group) or above the blame file "
+               "cap. Never part of any score.",
     },
     # --- conditional / over-time ---
     "before_after": {
