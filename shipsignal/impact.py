@@ -844,6 +844,7 @@ def _recover_from_pr_data(commits: list[Commit], pr_data: prdata.PRData,
         "measured_ai_commits": measured_ai,
         "recovered_ai_commits": recovered_ai,
         "newly_attributed": len(newly),
+        "newly_shas": [c.sha for c in newly],
         "squash_commits": len(squash_commits),
         "squash_matched": squash_matched,
         "coverage": round(squash_matched / len(squash_commits), 3) if squash_commits else None,
@@ -1087,6 +1088,7 @@ def compute_impact(
     squash_override: bool = False,
     release_tag_pattern: str | None = None,
     pr_data: prdata.PRData | None = None,
+    survival: bool = False,
 ) -> dict:
     result: dict = {
         "schema_version": SCHEMA_VERSION,
@@ -1184,6 +1186,35 @@ def compute_impact(
     # via --pr-data). Additive — the measured headline above is untouched.
     if pr_data is not None:
         result["adoption"]["recovery"] = _recover_from_pr_data(commits, pr_data, ai_count)
+
+    # --- Package L: AI-vs-other line survival (opt-in via --survival) ---
+    if survival and adoption_dt is not None:
+        # Local import avoids a module-load cycle (survival imports impact).
+        from .survival import compute_survival
+        ai_shas = {c.sha for c in commits if c.ai_authored}
+        if pr_data is not None:
+            ai_shas |= set(result["adoption"]["recovery"].get("newly_shas", []))
+        result["survival"] = compute_survival(root, commits, ai_shas, adoption_dt)
+    elif survival:
+        # Requested but no adoption date to age-match against — disclose, don't invent.
+        result["survival"] = {"status": "withheld",
+                              "reason": "no adoption date detected",
+                              "sampled": False, "files_blamed": 0, "files_total": 0}
+
+    # Calibration UX (Package L): survival is often withheld on repos that DO use AI
+    # but whose adoption auto-detection is too recent/conservative for the 90-day age
+    # floor. When the withhold is adoption/window-shaped (NOT a coverage cap, which
+    # --adoption-date can't fix) and the user hasn't already forced a date, point them
+    # at --adoption-date so they can measure survival from a known adoption point.
+    _sv = result.get("survival")
+    if (survival and _sv and _sv.get("status") == "withheld" and ai_count > 0
+            and adoption_date_override is None
+            and any(k in _sv.get("reason", "")
+                    for k in ("adoption date", "matched month", "min_group"))):
+        _sv["hint"] = ("this repo has AI commits but no measurable survival window was "
+                       "found automatically (often the adoption is too recent for the "
+                       "90-day age floor) — pass --adoption-date YYYY-MM-DD to measure "
+                       "survival from a known adoption point")
 
     # --- Delivery metrics (general health, NOT causal) ---
     result["metrics"] = {

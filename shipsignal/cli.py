@@ -142,6 +142,9 @@ def _cmd_impact(args: argparse.Namespace) -> int:
     try:
         cfg = _load_config(root)
         squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
+        survival_override = (
+            args.survival if args.survival is not None else bool(cfg.impact.survival)
+        )
         pr_data, prd_err = _load_pr_data(args)
         if prd_err is not None:
             return prd_err
@@ -165,6 +168,7 @@ def _cmd_impact(args: argparse.Namespace) -> int:
                 squash_override=squash_override,
                 release_tag_pattern=cfg.impact.release_tag_pattern,
                 pr_data=pr_data,
+                survival=survival_override,
             )
         print(report.render_impact(result, color=ansi.resolve_enabled(args.no_color)))
         if args.timeline:
@@ -218,6 +222,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
     try:
         cfg = _load_config(root)
         squash_override = args.squash if args.squash is not None else bool(cfg.impact.squash)
+        survival_override = (
+            args.survival if args.survival is not None else bool(cfg.impact.survival)
+        )
         pr_data, prd_err = _load_pr_data(args)
         if prd_err is not None:
             return prd_err
@@ -233,6 +240,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
                 squash_override=squash_override,
                 release_tag_pattern=cfg.impact.release_tag_pattern,
                 pr_data=pr_data,
+                survival=survival_override,
             )
         print(report.render_unified(impact_result, readiness_result,
                                     color=ansi.resolve_enabled(args.no_color)))
@@ -319,6 +327,9 @@ def main(argv: list[str] | None = None) -> int:
                                "ShipSignal reads the local file) — see docs/getting-started.md")
     impact_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
+    impact_p.add_argument("--survival", action="store_true", default=None,
+                          help="add an AI-vs-other line-survival comparison "
+                               "(opt-in; off by default, metadata-only blame)")
     impact_p.add_argument("--snapshot", nargs="?", const=_SNAPSHOT_DEFAULT, default=None,
                           metavar="PATH",
                           help="persist a small JSON snapshot for `shipsignal trend` "
@@ -338,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
                           help="override the auto-detected adoption date")
     report_p.add_argument("--timeline", action="store_true",
                           help="show the over-time trajectory (adoption + delivery health)")
+    report_p.add_argument("--survival", action="store_true", default=None,
+                          help="add an AI-vs-other line-survival comparison "
+                               "(opt-in; off by default, metadata-only blame)")
     report_p.add_argument("--squash", action="store_true", default=None,
                           help="treat the history as squash-merged — flag AI adoption as a "
                                "floor (for workflows whose squash commits lack a (#NNN) subject) "

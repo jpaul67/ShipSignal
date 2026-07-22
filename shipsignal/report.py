@@ -718,6 +718,26 @@ def render_impact(result: dict, *, color: bool = False) -> str:
             L.append(f"   n/a — {rc['reason']}")
         L.append("")
 
+    # --- AI line survival (Package L): age-matched retention of AI vs other lines —
+    # context, never scored; withheld unless matched months clear the coverage floors. ---
+    sv = result.get("survival")
+    if sv:
+        L.append("  AI line survival — age-matched, context, not scored:")
+        L.append(f"   {glossary.short('survival')}")
+        if sv.get("status") == "scored":
+            L.append(f"   AI lines surviving {sv['ai_survival'] * 100:.0f}%  ·  "
+                     f"other {sv['other_survival'] * 100:.0f}%   (matched months only)")
+            cov = sv.get("coverage") or {}
+            L.append(f"   coverage {cov.get('ai_commits', 0)} AI / "
+                     f"{cov.get('other_commits', 0)} other commits · blamed "
+                     f"{sv.get('files_blamed', 0)}/{sv.get('files_total', 0)} files"
+                     + ("  (sampled)" if sv.get("sampled") else ""))
+        else:
+            L.append(f"   n/a — {sv.get('reason', 'withheld')}")
+        if sv.get("hint"):
+            L.append(f"   → {sv['hint']}")
+        L.append("")
+
     # --- Before/after AI Enablement delta (the conditional bonus) ---
     if result.get("score_status") == "scored":
         L.append(f"  Before/after AI Enablement: {result['score']}/100")
@@ -926,6 +946,25 @@ def render_impact_markdown(result: dict) -> str:
         else:
             L.append(f"- *n/a — {rc['reason']}.*")
         L += ["", f"_<sub>{glossary.short('release_cadence')}</sub>_", ""]
+
+    # AI line survival (Package L) — age-matched, context, never scored.
+    sv = result.get("survival")
+    if sv:
+        L += ["## AI line survival (context — never scored)", ""]
+        if sv.get("status") == "scored":
+            cov = sv.get("coverage") or {}
+            L.append(f"- **AI lines surviving:** {sv['ai_survival'] * 100:.0f}% · "
+                     f"other {sv['other_survival'] * 100:.0f}% "
+                     "*(age-matched, matched months only)*")
+            L.append(f"- Coverage: {cov.get('ai_commits', 0)} AI / "
+                     f"{cov.get('other_commits', 0)} other commits · blamed "
+                     f"{sv.get('files_blamed', 0)}/{sv.get('files_total', 0)} files"
+                     + (" (sampled)" if sv.get("sampled") else ""))
+        else:
+            L.append(f"- *n/a — {sv.get('reason', 'withheld')}.*")
+        if sv.get("hint"):
+            L.append(f"- *{sv['hint']}*")
+        L += ["", f"_<sub>{glossary.short('survival')}</sub>_", ""]
 
     # Over-time trajectory (always included when there's enough history).
     traj = result.get("trajectory") or {}
@@ -1208,6 +1247,41 @@ def render_impact_html(result: dict) -> str:
     else:
         release_cadence_block = ""
 
+    # --- AI line survival (Package L) — age-matched, context, never scored ---
+    # The block bakes in its OWN leading "\n\n" separator and is glued directly onto
+    # {release_cadence_block} in the template (no template whitespace around it), so
+    # when survival is off it contributes ZERO bytes and the default HTML stays byte-
+    # identical (rail #3). A blank-line-wrapped {placeholder} would leak whitespace.
+    sv = result.get("survival")
+    if sv and sv.get("status") == "scored":
+        cov = sv.get("coverage") or {}
+        survival_block = (
+            "\n\n"
+            f"<h2>{_tip('AI line survival', 'survival')} "
+            f"<span class='hint'>age-matched · context, never scored</span></h2>"
+            f"<p class='hint'>{_esc(glossary.short('survival'))}</p>"
+            f"<p>AI lines surviving <b>{sv['ai_survival'] * 100:.0f}%</b> · "
+            f"other <b>{sv['other_survival'] * 100:.0f}%</b> "
+            f"<span class='hint'>(matched months only)</span></p>"
+            f"<p class='hint'>Coverage: {cov.get('ai_commits', 0)} AI / "
+            f"{cov.get('other_commits', 0)} other commits · blamed "
+            f"{sv.get('files_blamed', 0)}/{sv.get('files_total', 0)} files"
+            f"{' (sampled)' if sv.get('sampled') else ''}.</p>"
+        )
+    elif sv:
+        _svhint = (f"<p class='hint' style='margin-top:6px'>&rarr; {_esc(sv['hint'])}</p>"
+                   if sv.get("hint") else "")
+        survival_block = (
+            "\n\n"
+            f"<h2>{_tip('AI line survival', 'survival')} "
+            f"<span class='hint'>age-matched · context, never scored</span></h2>"
+            f"<p class='hint'>{_esc(glossary.short('survival'))}</p>"
+            f"<div class='withheld'>n/a — {_esc(sv.get('reason', 'withheld'))}.</div>"
+            f"{_svhint}"
+        )
+    else:
+        survival_block = ""
+
     # --- before/after bonus ---
     if result.get("score_status") == "scored":
         prows = "".join(
@@ -1317,7 +1391,7 @@ def render_impact_html(result: dict) -> str:
 
 {outcomes_block}
 
-{release_cadence_block}
+{release_cadence_block}{survival_block}
 
 {bonus_block}
 

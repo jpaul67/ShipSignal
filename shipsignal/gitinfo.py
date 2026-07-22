@@ -50,6 +50,19 @@ def tracked_files(root: Path) -> list[str]:
     return [ln for ln in out.splitlines() if ln] if out else []
 
 
+def tracked_files_at_head(root: Path) -> list[str]:
+    """Files tracked in the HEAD commit tree (``git ls-tree -r HEAD``).
+
+    Unlike :func:`tracked_files` (``git ls-files``, which reads the index and so
+    returns nothing when a checkout was incomplete — a big repo whose deep paths
+    exceed the Windows path limit, or a partial clone), this reads HEAD's tree
+    directly, so it reflects the committed source regardless of working-tree state.
+    Used by the survival lens, which analyses committed history.
+    """
+    out = _run(["git", "ls-tree", "-r", "--name-only", "HEAD"], root)
+    return [ln for ln in out.splitlines() if ln] if out else []
+
+
 def head_sha(root: Path) -> str | None:
     out = _run(["git", "rev-parse", "HEAD"], root)
     return out.strip() if out else None
@@ -175,6 +188,29 @@ def commits_between_tags(root: Path, t1: str, t2: str) -> list[int]:
             except ValueError:
                 pass
     return times
+
+
+def blame_incremental(root: Path, path: str, rev: str = "HEAD",
+                      timeout: int = 120) -> str | None:
+    """Raw ``git blame --incremental -w --no-abbrev <rev>`` stdout for ``path``, or None.
+
+    Blames ``rev`` (HEAD by default) from the object store, NOT the working tree, so
+    it works even when the checkout is incomplete (e.g. a large repo whose deep paths
+    exceed the Windows path limit, or a partial/treeless clone) — and it matches the
+    survival lens's semantics: surviving lines are lines still present in the committed
+    HEAD, never uncommitted working-tree edits.
+
+    The ``--incremental`` form is the ONLY permitted blame shape here: unlike
+    default ``git blame`` it emits block headers + metadata only and NEVER carries
+    source-line content, so a parser cannot accidentally read file contents.
+    Returns None on failure or empty output (e.g. untracked or binary paths).
+    """
+    out = _run(
+        ["git", "blame", "--incremental", "-w", "--no-abbrev", rev, "--", path],
+        root,
+        timeout=timeout,
+    )
+    return out if out and out.strip() else None
 
 
 def clone(url: str, dest: Path, timeout: int = 600, treeless: bool = True) -> tuple[bool, str]:
