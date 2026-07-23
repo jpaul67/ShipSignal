@@ -1,3 +1,3 @@
 """ShipSignal — AI impact, delivery-health & readiness scanner."""
 
-__version__ = "0.11.0"
+__version__ = "0.11.1"
