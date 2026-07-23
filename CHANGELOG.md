@@ -9,6 +9,14 @@ are git-tagged).
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-07-22
+
+### Fixed
+- Package version metadata. `pyproject.toml` still declared `0.10.0` at the `v0.11.0`
+  tag, so a pip-installed build reported `shipsignal 0.10.0` (via `importlib.metadata`)
+  while report footers rendered `v0.11.0` (from `shipsignal/__init__.py`). Both version
+  strings are now `0.11.1` and in sync. No functional change.
+
 ## [0.11.0] — 2026-07-21
 
 ### Added
